@@ -1,0 +1,147 @@
+{% load i18n %}
+
+{% block subject %}
+✨ Activa tu cuenta en {{ site_name }} ✨
+{% endblock subject %}
+
+{% block html_body %}
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8" />
+
+    <title>Activación de cuenta - {{ site_name }}</title>
+
+    <style>
+        body {
+            margin: 0;
+            background: #0E2A47;
+            font-family: "Segoe UI", Arial, sans-serif;
+            padding: 40px 0;
+        }
+
+        .container {
+            max-width: 620px;
+            margin: auto;
+            background: #ffffff;
+            border-radius: 14px;
+            overflow: hidden;
+            box-shadow: 0 8px 25px rgba(0,0,0,0.35);
+        }
+
+        .header {
+            background: #000;
+            text-align: center;
+            padding: 34px 20px;
+            border-bottom: 4px solid #C5A572;
+        }
+
+        .header img {
+            width: 110px;
+            margin-bottom: 8px;
+        }
+
+        .header-title {
+            font-size: 26px;
+            color: #C5A572;
+            font-weight: 600;
+        }
+
+        .content {
+            padding: 38px 32px;
+            color: #333;
+            line-height: 1.6;
+        }
+
+        .content h2 {
+            font-size: 22px;
+            color: #0E2A47;
+            margin-bottom: 15px;
+        }
+
+        .button-container {
+            text-align: center;
+            margin: 28px 0;
+        }
+
+        .button {
+            background: #C5A572;
+            color: #0E2A47 !important;
+            padding: 14px 32px;
+            text-decoration: none;
+            border-radius: 10px;
+            font-size: 16px;
+            font-weight: bold;
+            border: 2px solid #E8B76D;
+        }
+
+        .button:hover {
+            background: #E8B76D;
+        }
+
+        .footer {
+            background: #0E2A47;
+            color: white;
+            text-align: center;
+            font-size: 12px;
+            padding: 20px;
+        }
+
+        .footer a {
+            color: #39A1F4;
+            text-decoration: none;
+        }
+    </style>
+</head>
+
+<body>
+<div class="container">
+
+    <!-- HEADER -->
+    <div class="header">
+        <img src="https://tuservidor.com/static/logo-lexnova.png" alt="{{ site_name }}" />
+        <div class="header-title">LexNova Insight</div>
+    </div>
+
+    <!-- CONTENT -->
+    <div class="content">
+        <h2>¡Bienvenido(a) a {{ site_name }}!</h2>
+
+        <p>
+            Tu cuenta profesional está casi lista. Para comenzar a analizar,
+            predecir y transformar tus estrategias jurídicas, necesitas activar
+            tu acceso.
+        </p>
+
+        <p>
+            Haz clic en el botón de abajo para activar tu cuenta:
+        </p>
+
+        <div class="button-container">
+            <a href="{{ protocol }}://{{ domain }}/{{ url|safe }}" class="button" target="_blank">
+                Activar mi cuenta
+            </a>
+        </div>
+
+        <p>
+            Si no solicitaste esta cuenta, puedes ignorar este correo.
+        </p>
+
+        <p style="margin-top:25px;">
+            Gracias por unirte a
+            <strong style="color:#C5A572;">LexNova Insight</strong>,
+            donde la tecnología jurídica transforma tu defensa ⚖️✨.
+        </p>
+    </div>
+
+    <!-- FOOTER -->
+    <div class="footer">
+        © 2025 {{ site_name }}. Todos los derechos reservados. <br />
+        <a href="{{ protocol }}://{{ domain }}/privacy">Privacidad</a> ·
+        <a href="{{ protocol }}://{{ domain }}/terms">Términos</a>
+    </div>
+
+</div>
+</body>
+</html>
+{% endblock html_body %}
