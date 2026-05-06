@@ -189,3 +189,14 @@ logs/
 .idea/
 .DS_Store
 Thumbs.db
+# Project standard - Django API
+.env
+.env.local
+.env.*.local
+!.env.local.example
+venv/
+env/
+.venv/
+logs/
+.vscode/
+.idea/

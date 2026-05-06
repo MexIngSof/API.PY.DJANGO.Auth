@@ -12,6 +12,7 @@ import dotenv  # Para cargar variables de entorno desde un archivo .env
 # PROJECT INFO
 # ===============================
 PROJECT_NAME = "Auth"
+DB_SCHEMA = getenv("DB_SCHEMA", PROJECT_NAME)
 
 # Definición de la ruta base del proyecto
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -100,6 +101,9 @@ if DEVELOPMENT_MODE is True:
             "PASSWORD": getenv("DB_PASSWORD"),
             "HOST": getenv("DB_HOST", "localhost"),
             "PORT": getenv("DB_PORT", "5432"),
+            "OPTIONS": {
+                "options": f"-c search_path={DB_SCHEMA},public"
+            },
         }
     }
 elif len(sys.argv) > 0 and sys.argv[1] != 'collectstatic':
