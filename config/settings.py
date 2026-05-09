@@ -102,7 +102,7 @@ if DEVELOPMENT_MODE is True:
             "HOST": getenv("DB_HOST", "localhost"),
             "PORT": getenv("DB_PORT", "5432"),
             "OPTIONS": {
-                "options": f"-c search_path={DB_SCHEMA},public"
+            "options": f"-c search_path=\"{DB_SCHEMA}\",public"
             },
         }
     }
