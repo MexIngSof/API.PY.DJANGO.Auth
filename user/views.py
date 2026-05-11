@@ -1,132 +1,352 @@
+import hashlib
+
 from django.conf import settings
-from rest_framework.views import APIView
-from rest_framework.response import Response
+from django.contrib.auth import get_user_model
+from django.utils import timezone
+from djoser.social.views import ProviderAuthView
 from rest_framework import status
 from rest_framework.request import Request
-from djoser.social.views import ProviderAuthView
+from rest_framework.response import Response
+from rest_framework.views import APIView
+from rest_framework_simplejwt.tokens import AccessToken, RefreshToken
 from rest_framework_simplejwt.views import (
     TokenObtainPairView,
     TokenRefreshView,
-    TokenVerifyView
+    TokenVerifyView,
+)
+from social_django.models import UserSocialAuth
+
+from access.models import (
+    AccessAuditEvents,
+    Applications,
+    LoginAttempts,
+    RefreshTokens,
+    SocialLoginAttempts,
+    SocialProviders,
+    UserSocialAccounts,
+    UserDevices,
+    UserSessions,
 )
 
-# Esta clase extiende el login con proveedor externo (OAuth) de Djoser
+
+def get_client_ip(request):
+    forwarded_for = request.META.get("HTTP_X_FORWARDED_FOR")
+    if forwarded_for:
+        return forwarded_for.split(",")[0].strip()
+    return request.META.get("REMOTE_ADDR")
+
+
+def get_application_code(request):
+    return (
+        request.data.get("ApplicationCode")
+        or request.data.get("application_code")
+        or request.query_params.get("application_code")
+        or request.headers.get("X-Application-Code")
+        or ""
+    ).strip().upper()
+
+
+def sha256(value):
+    return hashlib.sha256((value or "").encode("utf-8")).hexdigest()
+
+
+def get_application(application_code):
+    if not application_code:
+        return None
+    return Applications.objects.filter(Code=application_code, IsActive=True).first()
+
+
+def get_social_provider(provider):
+    backend_name = (provider or "").strip().lower()
+    return SocialProviders.objects.filter(
+        BackendName=backend_name,
+        IsActive=True,
+    ).first()
+
+
+def get_token_claim(token, claim):
+    if not token:
+        return ""
+    try:
+        return str(token[claim])
+    except Exception:
+        return ""
+
+
+def get_token_expiration(token):
+    try:
+        return timezone.datetime.fromtimestamp(
+            token["exp"],
+            tz=timezone.get_current_timezone(),
+        )
+    except Exception:
+        return None
+
+
+def record_login_attempt(request, email, success, failure_reason="", user=None):
+    LoginAttempts.objects.create(
+        UserID=user,
+        Email=email or "",
+        ApplicationCode=get_application_code(request),
+        IpAddress=get_client_ip(request),
+        UserAgent=request.META.get("HTTP_USER_AGENT", ""),
+        Success=success,
+        FailureReason=failure_reason,
+    )
+
+
+def record_social_login_attempt(
+    request,
+    provider,
+    success,
+    failure_reason="",
+    user=None,
+    email="",
+):
+    SocialLoginAttempts.objects.create(
+        UserID=user,
+        SocialProviderID=get_social_provider(provider),
+        ApplicationCode=get_application_code(request),
+        Email=email or getattr(user, "email", "") or "",
+        IpAddress=get_client_ip(request),
+        UserAgent=request.META.get("HTTP_USER_AGENT", ""),
+        Success=success,
+        FailureReason=failure_reason,
+    )
+
+
+def sync_social_account(provider, user):
+    social_provider = get_social_provider(provider)
+    if social_provider is None or user is None:
+        return None
+
+    social_auth = UserSocialAuth.objects.filter(
+        user=user,
+        provider=social_provider.BackendName,
+    ).order_by("-id").first()
+
+    if social_auth is None:
+        return None
+
+    extra_data = social_auth.extra_data or {}
+    account, _ = UserSocialAccounts.objects.update_or_create(
+        SocialProviderID=social_provider,
+        ProviderUserId=str(social_auth.uid),
+        defaults={
+            "UserID": user,
+            "Email": extra_data.get("email", getattr(user, "email", "")) or "",
+            "DisplayName": (
+                extra_data.get("name")
+                or extra_data.get("full_name")
+                or f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
+            ),
+            "ProfileUrl": extra_data.get("profile") or extra_data.get("link") or "",
+            "AvatarUrl": extra_data.get("picture") or extra_data.get("avatar_url") or "",
+            "IsActive": True,
+            "LastLoginAt": timezone.now(),
+        },
+    )
+    return account
+
+
+def record_access_event(request, event_type, user=None, application=None, metadata=None):
+    AccessAuditEvents.objects.create(
+        UserID=user,
+        ApplicationID=application,
+        EventType=event_type,
+        IpAddress=get_client_ip(request),
+        UserAgent=request.META.get("HTTP_USER_AGENT", ""),
+        Metadata=metadata or {},
+    )
+
+
+def record_successful_session(request, user, access_token_value, refresh_token_value):
+    application = get_application(get_application_code(request))
+    user_agent = request.META.get("HTTP_USER_AGENT", "")
+    ip_address = get_client_ip(request)
+    fingerprint_source = (
+        request.headers.get("X-Device-Fingerprint")
+        or f"{user.id}:{ip_address}:{user_agent}"
+    )
+    fingerprint_hash = sha256(fingerprint_source)
+
+    device, _ = UserDevices.objects.update_or_create(
+        UserID=user,
+        FingerprintHash=fingerprint_hash,
+        defaults={
+            "DeviceName": request.headers.get("X-Device-Name", ""),
+            "DeviceType": request.headers.get("X-Device-Type", ""),
+            "OperatingSystem": request.headers.get("X-Device-OS", ""),
+            "Browser": request.headers.get("X-Device-Browser", ""),
+            "IpAddress": ip_address,
+            "UserAgent": user_agent,
+            "IsActive": True,
+            "RevokedAt": None,
+            "RevokedReason": "",
+        },
+    )
+
+    access_token = AccessToken(access_token_value)
+    refresh_token = RefreshToken(refresh_token_value)
+
+    session = UserSessions.objects.create(
+        UserID=user,
+        DeviceID=device,
+        ApplicationID=application,
+        AccessTokenJti=get_token_claim(access_token, "jti"),
+        RefreshTokenHash=sha256(refresh_token_value),
+        ExpiresAt=get_token_expiration(refresh_token),
+        IsOnline=True,
+    )
+
+    RefreshTokens.objects.create(
+        UserID=user,
+        SessionID=session,
+        TokenHash=sha256(refresh_token_value),
+        Jti=get_token_claim(refresh_token, "jti"),
+        ExpiresAt=get_token_expiration(refresh_token),
+    )
+
+    record_access_event(
+        request,
+        "login.success",
+        user=user,
+        application=application,
+        metadata={"session_id": session.SessionID},
+    )
+
+
 class CustomProviderAuthView(ProviderAuthView):
     def post(self, request, *args, **kwargs):
-        # Llama al método original para autenticar y obtener la respuesta
+        provider = kwargs.get("provider", "")
         response = super().post(request, *args, **kwargs)
 
-        # Si la autenticación fue exitosa (201 Created)
-        if response.status_code == 201:
-            # Extrae los tokens del cuerpo de la respuesta
-            access_token = response.data.get('access')
-            refresh_token = response.data.get('refresh')
-            
-            # Guarda el token de acceso como cookie segura
+        if response.status_code == status.HTTP_201_CREATED:
+            access_token = response.data.get("access")
+            refresh_token = response.data.get("refresh")
+            user = None
+
+            if access_token:
+                token = AccessToken(access_token)
+                user_id = get_token_claim(token, "user_id")
+                User = get_user_model()
+                user = User.objects.filter(id=user_id).first()
+
+            record_social_login_attempt(request, provider, True, user=user)
+            sync_social_account(provider, user)
+
+            if user and access_token and refresh_token:
+                record_successful_session(request, user, access_token, refresh_token)
+
             response.set_cookie(
-                'access',
+                "access",
                 access_token,
                 max_age=settings.AUTH_COOKIE_ACCESS_MAX_AGE,
                 path=settings.AUTH_COOKIE_PATH,
                 secure=settings.AUTH_COOKIE_SECURE,
                 httponly=settings.AUTH_COOKIE_HTTP_ONLY,
-                samesite=settings.AUTH_COOKIE_SAMESITE
-            )
-
-            # Guarda el token de actualización también como cookie segura
-            response.set_cookie(
-                'refresh',
-                refresh_token,
-                max_age=settings.AUTH_COOKIE_ACCESS_MAX_AGE,
-                path=settings.AUTH_COOKIE_PATH,
-                secure=settings.AUTH_COOKIE_SECURE,
-                httponly=settings.AUTH_COOKIE_HTTP_ONLY,
-                samesite=settings.AUTH_COOKIE_SAMESITE
-            )
-
-        return response
-
-# Esta clase sobreescribe la vista de obtención de tokens con JWT (login con usuario/contraseña)
-class CustomTokenObtainPairView(TokenObtainPairView):
-    def post(self, request: Request, *args, **kwargs) -> Response:
-        # Llama al método original para procesar el login
-        response = super().post(request, *args, **kwargs)
-
-        if response.status_code == 200:
-            access_token  = response.data.get('access')
-            refresh_token = response.data.get('refresh')
-
-            # Almacena ambos tokens en cookies seguras
-            response.set_cookie(
-                'access',
-                access_token,
-                max_age=settings.AUTH_COOKIE_ACCESS_MAX_AGE,
-                path=settings.AUTH_COOKIE_PATH,
-                secure=settings.AUTH_COOKIE_SECURE,
-                httponly=settings.AUTH_COOKIE_HTTP_ONLY,
-                samesite=settings.AUTH_COOKIE_SAMESITE
+                samesite=settings.AUTH_COOKIE_SAMESITE,
             )
 
             response.set_cookie(
-                'refresh',
+                "refresh",
                 refresh_token,
                 max_age=settings.AUTH_COOKIE_REFRESH_MAX_AGE,
                 path=settings.AUTH_COOKIE_PATH,
                 secure=settings.AUTH_COOKIE_SECURE,
                 httponly=settings.AUTH_COOKIE_HTTP_ONLY,
-                samesite=settings.AUTH_COOKIE_SAMESITE
+                samesite=settings.AUTH_COOKIE_SAMESITE,
+            )
+        else:
+            record_social_login_attempt(
+                request,
+                provider,
+                False,
+                failure_reason="provider_auth_failed",
             )
 
         return response
 
-# Esta clase sobreescribe la vista de refresco del token de acceso usando el refresh token
-class CustomTokenRefreshView(TokenRefreshView):
+
+class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request: Request, *args, **kwargs) -> Response:
-        # Toma el refresh token directamente desde las cookies
-        refresh_token = request.COOKIES.get('refresh')
-
-        if refresh_token:
-            request.data['refresh'] = refresh_token
-
-        # Ejecuta el refresco normalmente
+        email = (request.data.get("email") or "").strip().lower()
         response = super().post(request, *args, **kwargs)
 
-        if response.status_code == 200:
-            access_token = response.data.get('access')
+        User = get_user_model()
+        user = User.objects.filter(email=email).first()
 
-            # Actualiza la cookie con el nuevo token de acceso
+        if response.status_code == status.HTTP_200_OK:
+            access_token = response.data.get("access")
+            refresh_token = response.data.get("refresh")
+
+            record_login_attempt(request, email, True, user=user)
+            if user and access_token and refresh_token:
+                record_successful_session(request, user, access_token, refresh_token)
+
             response.set_cookie(
-                'access',
+                "access",
                 access_token,
                 max_age=settings.AUTH_COOKIE_ACCESS_MAX_AGE,
                 path=settings.AUTH_COOKIE_PATH,
                 secure=settings.AUTH_COOKIE_SECURE,
                 httponly=settings.AUTH_COOKIE_HTTP_ONLY,
-                samesite=settings.AUTH_COOKIE_SAMESITE
+                samesite=settings.AUTH_COOKIE_SAMESITE,
+            )
+
+            response.set_cookie(
+                "refresh",
+                refresh_token,
+                max_age=settings.AUTH_COOKIE_REFRESH_MAX_AGE,
+                path=settings.AUTH_COOKIE_PATH,
+                secure=settings.AUTH_COOKIE_SECURE,
+                httponly=settings.AUTH_COOKIE_HTTP_ONLY,
+                samesite=settings.AUTH_COOKIE_SAMESITE,
+            )
+        else:
+            record_login_attempt(request, email, False, "invalid_credentials", user=user)
+
+        return response
+
+
+class CustomTokenRefreshView(TokenRefreshView):
+    def post(self, request: Request, *args, **kwargs) -> Response:
+        refresh_token = request.COOKIES.get("refresh")
+
+        if refresh_token:
+            request.data["refresh"] = refresh_token
+
+        response = super().post(request, *args, **kwargs)
+
+        if response.status_code == status.HTTP_200_OK:
+            access_token = response.data.get("access")
+
+            response.set_cookie(
+                "access",
+                access_token,
+                max_age=settings.AUTH_COOKIE_ACCESS_MAX_AGE,
+                path=settings.AUTH_COOKIE_PATH,
+                secure=settings.AUTH_COOKIE_SECURE,
+                httponly=settings.AUTH_COOKIE_HTTP_ONLY,
+                samesite=settings.AUTH_COOKIE_SAMESITE,
             )
 
         return response
 
-# Esta clase sobreescribe la verificación del token accediendo al token desde cookies
+
 class CustomTokenVerifyView(TokenVerifyView):
     def post(self, request: Request, *args, **kwargs) -> Response:
-        # Toma el token de acceso desde la cookie
-        access_token = request.COOKIES.get('access')
+        access_token = request.COOKIES.get("access")
 
         if access_token:
-            request.data['token'] = access_token
+            request.data["token"] = access_token
 
-        # Llama a la vista original con el token actualizado
         return super().post(request, *args, **kwargs)
 
-# Esta vista elimina las cookies y "cierra sesión" efectivamente
+
 class LogoutView(APIView):
     def post(self, request, *args, **kwargs):
-        # Crea una respuesta vacía con código 204 (sin contenido)
         response = Response(status=status.HTTP_204_NO_CONTENT)
-
-        # Elimina ambas cookies
-        response.delete_cookie('access')
-        response.delete_cookie('refresh')
-
+        response.delete_cookie("access")
+        response.delete_cookie("refresh")
         return response

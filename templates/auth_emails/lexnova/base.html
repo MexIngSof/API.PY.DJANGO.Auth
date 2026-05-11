@@ -1,0 +1,38 @@
+{% load i18n %}
+
+{% block subject %}{% endblock subject %}
+
+{% block text_body %}{% endblock text_body %}
+
+{% block html_body %}
+<div style="margin:0;padding:34px 0;background:#f7f4ee;font-family:Arial,Helvetica,sans-serif;color:#132238;">
+  <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;">
+    <tr>
+      <td align="center" style="padding:0 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" style="width:100%;max-width:620px;border-collapse:collapse;background:#ffffff;border:1px solid #d8c8aa;border-radius:8px;overflow:hidden;">
+          <tr>
+            <td style="padding:26px 28px;background:#0e2a47;color:#ffffff;border-bottom:4px solid #c5a572;">
+              <div style="font-size:13px;font-weight:800;text-transform:uppercase;color:#c5a572;">{{ commercial_name }}</div>
+              <h1 style="margin:10px 0 0;font-size:26px;line-height:1.2;">{% block headline %}{% endblock headline %}</h1>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:30px 28px;">
+              <p style="margin:0 0 14px;font-size:16px;line-height:1.6;">Hola{% if user %} {{ user.email }}{% endif %}.</p>
+              <p style="margin:0 0 12px;font-size:16px;line-height:1.6;">{% block intro %}{% endblock intro %}</p>
+              <p style="margin:0 0 24px;font-size:15px;line-height:1.6;color:#596579;">{% block detail %}{% endblock detail %}</p>
+              <a href="{{ action_url }}" style="display:inline-block;background:#c5a572;color:#0e2a47;text-decoration:none;font-weight:800;padding:13px 18px;border-radius:8px;">{% block cta %}{% endblock cta %}</a>
+              <p style="margin:24px 0 0;font-size:13px;line-height:1.6;color:#596579;">Si el boton no abre, copia este enlace:<br><span style="color:#0e2a47;">{{ action_url }}</span></p>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding:18px 28px;background:#f7f4ee;border-top:1px solid #d8c8aa;color:#596579;font-size:12px;line-height:1.5;">
+              LexNova protege el acceso a casos, documentos y analisis legal con trazabilidad.
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</div>
+{% endblock html_body %}

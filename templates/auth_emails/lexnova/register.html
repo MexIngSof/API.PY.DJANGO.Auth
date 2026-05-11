@@ -1,0 +1,12 @@
+{% extends "auth_emails/lexnova/base.html" %}
+
+{% block subject %}LexNova - cuenta creada{% endblock subject %}
+{% block text_body %}Hola{% if user %} {{ user.email }}{% endif %}.
+
+Tu cuenta LexNova fue creada.
+Continua aqui:
+{{ action_url }}{% endblock text_body %}
+{% block headline %}Cuenta creada en LexNova{% endblock headline %}
+{% block intro %}Tu acceso fue registrado correctamente.{% endblock intro %}
+{% block detail %}Desde ahora puedes continuar hacia la gestion y analisis de informacion legal.{% endblock detail %}
+{% block cta %}Ir a LexNova{% endblock cta %}

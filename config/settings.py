@@ -48,7 +48,7 @@ INSTALLED_APPS = [
     'djoser',  # Para manejar la autenticación y el registro de usuarios
     'storages',  # Para manejar almacenamiento en la nube (como AWS S3)
     'social_django',  # Para manejar la autenticación de redes sociales
-    'user',  # Aplicación personalizada de usuarios
+    'user.apps.UserConfig',  # Aplicación personalizada de usuarios
     'access',
     'roles',
 ]
@@ -102,7 +102,7 @@ if DEVELOPMENT_MODE is True:
             "HOST": getenv("DB_HOST", "localhost"),
             "PORT": getenv("DB_PORT", "5432"),
             "OPTIONS": {
-            "options": f"-c search_path=\"{DB_SCHEMA}\",public"
+            "options": f"-c search_path=public,\"{DB_SCHEMA}\""
             },
         }
     }
@@ -200,7 +200,7 @@ REST_FRAMEWORK = {
 }
 
 
-# Configuración de Djoser para la API de autenticación
+# Configuracion de Djoser para la API de autenticacion
 DJOSER = {
     "LOGIN_FIELD": "email",
     'PASSWORD_RESET_CONFIRM_URL': 'password-reset/{uid}/{token}',
@@ -211,10 +211,14 @@ DJOSER = {
     'TOKEN_MODEL': None,
     'SOCIAL_AUTH_ALLOWED_REDIRECT_URIS': getenv('REDIRECT_URIS').split(','),
 
-    # 👇 Rutas hacia tus clases personalizadas
+    # Rutas hacia las clases personalizadas de correo por aplicacion.
     'EMAIL': {
         'activation': 'auth.custom_email.ActivationEmail',
+        'confirmation': 'auth.custom_email.ConfirmationEmail',
         'password_reset': 'auth.custom_email.PasswordResetEmail',
+        'password_changed_confirmation': 'auth.custom_email.PasswordChangedConfirmationEmail',
+        'username_reset': 'auth.custom_email.UsernameResetEmail',
+        'username_changed_confirmation': 'auth.custom_email.UsernameChangedConfirmationEmail',
     },
     "SERIALIZERS": {
         "user_create": "user.serializers.CustomUserCreatePasswordRetypeSerializer",
@@ -222,8 +226,8 @@ DJOSER = {
     }
 }
 
-# Configuración de cookies de autenticación
-# Nombre de la cookie que almacenará el token de acceso
+# Configuracion de cookies de autenticacion
+# Nombre de la cookie que almacena el token de acceso
 AUTH_COOKIE = 'access'
 # Duración del token de acceso en segundos (5 minutos)
 # Esto es útil para seguridad, pero puede ser incómodo si no usas refresh frecuentemente.

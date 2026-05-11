@@ -1,0 +1,11 @@
+{% extends "auth_emails/lexnova/base.html" %}
+
+{% block subject %}LexNova - email actualizado{% endblock subject %}
+{% block text_body %}Hola{% if user %} {{ user.email }}{% endif %}.
+
+El email de tu cuenta fue actualizado:
+{{ action_url }}{% endblock text_body %}
+{% block headline %}Email actualizado{% endblock headline %}
+{% block intro %}El email de tu cuenta LexNova fue actualizado.{% endblock intro %}
+{% block detail %}Puedes revisar los datos de contacto vigentes desde tu perfil.{% endblock detail %}
+{% block cta %}Ir a mi perfil{% endblock cta %}

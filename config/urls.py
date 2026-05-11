@@ -18,4 +18,5 @@ urlpatterns = [
     # <<-- Aquí van tus rutas custom SIN CHOCAR con Djoser
     path('api/auth/', include('user.urls')),
     path('api/access/', include('access.urls')),
+    path('api/', include('access.urls')),
 ]

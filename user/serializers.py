@@ -1,50 +1,55 @@
 from djoser.serializers import UserCreatePasswordRetypeSerializer
 from rest_framework import serializers
+
+from access.models import Applications, PasswordHistory
 from roles.models import Roles, UserRoles
-from .models import UserAccount
+from user.models import UserAccount
 
 
 class CustomUserCreatePasswordRetypeSerializer(UserCreatePasswordRetypeSerializer):
-
     role = serializers.CharField(write_only=True)
+    ApplicationCode = serializers.CharField(write_only=True, required=False, allow_blank=True)
 
     class Meta(UserCreatePasswordRetypeSerializer.Meta):
         model = UserAccount
         fields = UserCreatePasswordRetypeSerializer.Meta.fields + (
             "first_name",
             "last_name",
+            "idApp",
             "role",
+            "ApplicationCode",
         )
 
+    def validate_role(self, value):
+        if not Roles.objects.filter(Name=value).exists():
+            raise serializers.ValidationError("Role does not exist.")
+        return value
+
+    def validate_ApplicationCode(self, value):
+        application_code = (value or "").strip().upper()
+        if application_code and not Applications.objects.filter(
+            Code=application_code,
+            IsActive=True,
+        ).exists():
+            raise serializers.ValidationError("ApplicationCode does not exist or is inactive.")
+        return application_code
+
     def validate(self, attrs):
-
-        # EXTRAE Y GUARDA LOS CAMPOS PERSONALIZADOS
         role = attrs.pop("role", None)
-
-        # VALIDA CON DJOSER (solo password, email, first_name, last_name)
+        application_code = attrs.pop("ApplicationCode", "")
         attrs = super().validate(attrs)
-
-        # REINSERTA los campos personalizados dentro de validated_data
         attrs["role"] = role
-
+        attrs["ApplicationCode"] = application_code
         return attrs
 
     def create(self, validated_data):
-
-        # QUITAR re_password
         validated_data.pop("re_password", None)
-
-        # Extraer campos personalizados
         role_name = validated_data.pop("role")
+        validated_data.pop("ApplicationCode", "")
 
-        # Crear usuario con Djoser
         user = super().create(validated_data)
-
-        # Guardar idApp
-        user.save()
-
-        # Asignar rol
         role_obj = Roles.objects.get(Name=role_name)
         UserRoles.objects.create(UserID=user, RoleID=role_obj)
+        PasswordHistory.objects.create(UserID=user, PasswordHash=user.password)
 
         return user
