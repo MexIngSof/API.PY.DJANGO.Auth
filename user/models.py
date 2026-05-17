@@ -37,6 +37,7 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     is_active = models.BooleanField(default=False, db_column="IsActive")
     is_staff = models.BooleanField(default=False, db_column="IsStaff")
     is_superuser = models.BooleanField(default=False, db_column="IsSuperuser")
+    must_change_password = models.BooleanField(default=False, db_column="MustChangePassword")
     idApp = models.IntegerField(null=False, blank=False, db_column="ApplicationId")
 
     objects = UserAccountManager()
