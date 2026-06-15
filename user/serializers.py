@@ -51,6 +51,8 @@ class CustomUserCreatePasswordRetypeSerializer(UserCreatePasswordRetypeSerialize
 
         if application_code.strip().upper() == "LEXNOVA":
             role = "CLIENT_BASE"
+        elif application_code.strip().upper() == "REFAPART":
+            role = "CUSTOMER"
         elif not role:
             raise serializers.ValidationError({"role": "This field is required."})
 
