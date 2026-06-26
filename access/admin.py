@@ -49,10 +49,30 @@ class TransactionalEmailTemplatesAdmin(admin.ModelAdmin):
 
 @admin.register(EmailDeliveryLogs)
 class EmailDeliveryLogsAdmin(admin.ModelAdmin):
-    list_display = ("ActionCode", "ToEmail", "ApplicationID", "Status", "CreatedAt", "SentAt")
-    list_filter = ("ActionCode", "Status", "ApplicationID")
-    search_fields = ("ToEmail", "Subject", "ErrorMessage")
-    readonly_fields = ("CreatedAt", "SentAt")
+    list_display = (
+        "ActionCode",
+        "ToEmail",
+        "ApplicationID",
+        "Status",
+        "Provider",
+        "RetryCount",
+        "CreatedAt",
+        "SentAt",
+        "DeliveredAt",
+    )
+    list_filter = ("ActionCode", "Status", "ApplicationID", "Provider")
+    search_fields = (
+        "ToEmail",
+        "Subject",
+        "ErrorMessage",
+        "FailureReason",
+        "LastErrorCode",
+        "ProviderRequestId",
+        "ProviderMessageId",
+        "CorrelationId",
+        "RequestId",
+    )
+    readonly_fields = ("CreatedAt", "SentAt", "DeliveredAt")
 
 
 @admin.register(SocialProviders)
