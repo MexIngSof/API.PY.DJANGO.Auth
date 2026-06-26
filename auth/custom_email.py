@@ -1,7 +1,15 @@
+import hashlib
+import logging
+
+from django.conf import settings
 from django.template import Context, Template, TemplateDoesNotExist
 from django.template.loader import get_template
 from django.utils import timezone
 from djoser import email
+
+from auth.email_settings import get_email_settings
+
+logger = logging.getLogger(__name__)
 
 
 ACTION_ACTIVATION = "VERIFY_ACCOUNT"
@@ -28,6 +36,56 @@ ACTION_TEMPLATE_NAMES = {
     ACTION_EMAIL_RESET: "email_reset",
     ACTION_EMAIL_CHANGED: "email_changed",
 }
+
+
+def mask_email(email_address):
+    if not email_address or "@" not in email_address:
+        return ""
+    local, domain = email_address.split("@", 1)
+    if len(local) <= 2:
+        local_mask = f"{local[:1]}***"
+    else:
+        local_mask = f"{local[:2]}***{local[-1:]}"
+    return f"{local_mask}@{domain}"
+
+
+def hash_email(email_address):
+    if not email_address:
+        return ""
+    return f"sha256:{hashlib.sha256(email_address.lower().encode()).hexdigest()}"
+
+
+def provider_name(email_config=None):
+    if email_config is not None:
+        return email_config.provider.upper()
+    backend = getattr(settings, "EMAIL_BACKEND", "")
+    if "ses" in backend.lower():
+        return "SES"
+    if "smtp" in backend.lower():
+        return "SMTP"
+    if "console" in backend.lower():
+        return "CONSOLE"
+    return backend.rsplit(".", 1)[-1].upper() if backend else "UNKNOWN"
+
+
+def classify_email_error(exc):
+    message = str(exc)
+    normalized = message.lower()
+    if "region" in normalized:
+        return "SES_REGION_MISSING"
+    if "credential" in normalized or "signature" in normalized or "access key" in normalized:
+        return "SES_CREDENTIALS_INVALID"
+    if "sandbox" in normalized:
+        return "SES_SANDBOX_ENABLED"
+    if "domain" in normalized and "verif" in normalized:
+        return "SES_DOMAIN_NOT_VERIFIED"
+    if "quota" in normalized:
+        return "SES_QUOTA_EXCEEDED"
+    if "throttl" in normalized or "rate" in normalized:
+        return "SES_THROTTLED"
+    if "timeout" in normalized:
+        return "EMAIL_PROVIDER_TIMEOUT"
+    return "EMAIL_PROVIDER_UNAVAILABLE"
 
 
 def get_application_code(request):
@@ -149,37 +207,126 @@ class AuthTransactionalEmailMixin:
         template = getattr(self, "auth_email_template", None)
         user = self.context.get("user") if hasattr(self, "context") else None
         to_email = to[0] if isinstance(to, (list, tuple)) and to else str(to)
+        request = getattr(self, "request", None)
+        request_id = request.headers.get("X-Request-ID", "") if request else ""
+        correlation_id = request.headers.get("X-Correlation-ID", "") if request else ""
+        application_code = application.Code if application else get_application_code(request) or "AUTH"
+        resolved_email_settings = get_email_settings(
+            application_code,
+            development_mode=getattr(settings, "DEVELOPMENT_MODE", True),
+        )
+        provider = provider_name(resolved_email_settings)
 
         if email_settings is not None:
             kwargs.setdefault(
                 "from_email",
                 f"{email_settings.SenderName} <{email_settings.SenderEmail}>",
             )
+        elif resolved_email_settings.from_email:
+            kwargs.setdefault("from_email", resolved_email_settings.from_email)
+
+        delivery_log = EmailDeliveryLogs.objects.create(
+            ApplicationID=application,
+            TransactionalEmailTemplateID=template,
+            UserID=user if getattr(user, "pk", None) else None,
+            ActionCode=self.action_code,
+            ToEmail=to_email,
+            Subject=getattr(self, "subject", ""),
+            Status="PROCESSING",
+            Provider=provider,
+            CorrelationId=correlation_id,
+            RequestId=request_id,
+            ProviderResponsePayload={
+                "config_source": resolved_email_settings.source,
+                "project_code": resolved_email_settings.project_code,
+                "provider_complete": resolved_email_settings.is_complete,
+            },
+        )
 
         try:
             response = super().send(to, *args, **kwargs)
-            EmailDeliveryLogs.objects.create(
-                ApplicationID=application,
-                TransactionalEmailTemplateID=template,
-                UserID=user if getattr(user, "pk", None) else None,
-                ActionCode=self.action_code,
-                ToEmail=to_email,
-                Subject=getattr(self, "subject", ""),
-                Status="SENT",
-                SentAt=timezone.now(),
+            delivery_log.Status = "SENT" if response else "FAILED"
+            delivery_log.ProviderResponseCode = str(response)
+            delivery_log.ProviderResponsePayload = {
+                "backend": getattr(settings, "EMAIL_BACKEND", ""),
+                "result": response,
+                "config_source": resolved_email_settings.source,
+                "project_code": resolved_email_settings.project_code,
+                "provider_complete": resolved_email_settings.is_complete,
+            }
+            delivery_log.SentAt = timezone.now() if response else None
+            if not response:
+                delivery_log.LastErrorCode = "EMAIL_PROVIDER_UNAVAILABLE"
+                delivery_log.FailureReason = "Email backend returned no accepted recipients."
+                delivery_log.ErrorMessage = delivery_log.FailureReason
+            delivery_log.save(
+                update_fields=[
+                    "Status",
+                    "ProviderResponseCode",
+                    "ProviderResponsePayload",
+                    "SentAt",
+                    "LastErrorCode",
+                    "FailureReason",
+                    "ErrorMessage",
+                ]
+            )
+            logger.info(
+                "auth.email.delivery.%s",
+                "sent" if response else "failed",
+                extra={
+                    "event": "auth.email.delivery.sent" if response else "auth.email.delivery.failed",
+                    "application_code": application_code,
+                    "action_code": self.action_code,
+                    "email_hash": hash_email(to_email),
+                    "email_mask": mask_email(to_email),
+                    "provider": provider,
+                    "provider_response_code": str(response),
+                    "correlation_id": correlation_id,
+                    "request_id": request_id,
+                    "retry_count": delivery_log.RetryCount,
+                    "error_code": delivery_log.LastErrorCode,
+                },
             )
             return response
         except Exception as exc:
-            EmailDeliveryLogs.objects.create(
-                ApplicationID=application,
-                TransactionalEmailTemplateID=template,
-                UserID=user if getattr(user, "pk", None) else None,
-                ActionCode=self.action_code,
-                ToEmail=to_email,
-                Subject=getattr(self, "subject", ""),
-                Status="FAILED",
-                ErrorMessage=str(exc),
+            error_code = classify_email_error(exc)
+            delivery_log.Status = "FAILED"
+            delivery_log.ErrorMessage = str(exc)
+            delivery_log.FailureReason = str(exc)
+            delivery_log.LastErrorCode = error_code
+            delivery_log.ProviderResponsePayload = {
+                "backend": getattr(settings, "EMAIL_BACKEND", ""),
+                "exception_type": exc.__class__.__name__,
+                "config_source": resolved_email_settings.source,
+                "project_code": resolved_email_settings.project_code,
+                "provider_complete": resolved_email_settings.is_complete,
+            }
+            delivery_log.save(
+                update_fields=[
+                    "Status",
+                    "ErrorMessage",
+                    "FailureReason",
+                    "LastErrorCode",
+                    "ProviderResponsePayload",
+                ]
             )
+            logger.exception(
+                "auth.email.delivery.failed",
+                extra={
+                    "event": "auth.email.delivery.failed",
+                    "application_code": application_code,
+                    "action_code": self.action_code,
+                    "email_hash": hash_email(to_email),
+                    "email_mask": mask_email(to_email),
+                    "provider": provider,
+                    "correlation_id": correlation_id,
+                    "request_id": request_id,
+                    "retry_count": delivery_log.RetryCount,
+                    "error_code": error_code,
+                },
+            )
+            if getattr(settings, "AUTH_EMAIL_DELIVERY_FAIL_OPEN", True):
+                return 0
             raise
 
 
