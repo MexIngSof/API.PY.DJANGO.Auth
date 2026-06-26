@@ -96,8 +96,40 @@ class EmailDeliveryLogs(models.Model):
     ActionCode = models.CharField(max_length=80, db_column="ActionCode")
     ToEmail = models.EmailField(max_length=255, db_column="ToEmail")
     Subject = models.CharField(max_length=255, blank=True, db_column="Subject")
-    Status = models.CharField(max_length=40, default="CREATED", db_column="Status")
+    Status = models.CharField(max_length=40, default="PENDING", db_column="Status")
     ErrorMessage = models.TextField(blank=True, db_column="ErrorMessage")
+    Provider = models.CharField(max_length=60, blank=True, db_column="Provider")
+    ProviderRequestId = models.CharField(
+        max_length=255,
+        blank=True,
+        db_column="ProviderRequestId",
+    )
+    ProviderMessageId = models.CharField(
+        max_length=255,
+        blank=True,
+        db_column="ProviderMessageId",
+    )
+    ProviderResponseCode = models.CharField(
+        max_length=80,
+        blank=True,
+        db_column="ProviderResponseCode",
+    )
+    ProviderResponsePayload = models.JSONField(
+        default=dict,
+        blank=True,
+        db_column="ProviderResponsePayload",
+    )
+    FailureReason = models.TextField(blank=True, db_column="FailureReason")
+    LastErrorCode = models.CharField(
+        max_length=100,
+        blank=True,
+        db_column="LastErrorCode",
+    )
+    RetryCount = models.PositiveIntegerField(default=0, db_column="RetryCount")
+    NextRetryAt = models.DateTimeField(null=True, blank=True, db_column="NextRetryAt")
+    DeliveredAt = models.DateTimeField(null=True, blank=True, db_column="DeliveredAt")
+    CorrelationId = models.CharField(max_length=100, blank=True, db_column="CorrelationId")
+    RequestId = models.CharField(max_length=100, blank=True, db_column="RequestId")
     CreatedAt = models.DateTimeField(auto_now_add=True, db_column="CreatedAt")
     SentAt = models.DateTimeField(null=True, blank=True, db_column="SentAt")
 

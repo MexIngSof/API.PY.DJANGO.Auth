@@ -7,6 +7,7 @@ from pathlib import Path  # Para trabajar con rutas de archivos de manera más e
 # Para generar una clave secreta aleatoria si no se encuentra
 from django.core.management.utils import get_random_secret_key
 import dotenv  # Para cargar variables de entorno desde un archivo .env
+from auth.email_settings import get_email_settings
 
 # ===============================
 # PROJECT INFO
@@ -114,16 +115,34 @@ elif len(sys.argv) > 0 and sys.argv[1] != 'collectstatic':
         'default': dj_database_url.parse(getenv('DATABASE_URL'))
     }
 
-# Configuración de SES (Amazon Simple Email Service) para el envío de correos electrónicos
-EMAIL_BACKEND = 'django_ses.SESBackend'
-# EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
-DEFAULT_FROM_EMAIL = getenv('AWS_SES_FROM_EMAIL')
-AWS_SES_ACCESS_KEY_ID = getenv('AWS_SES_ACCESS_KEY_ID')
-AWS_SES_SECRET_ACCESS_KEY = getenv('AWS_SES_SECRET_ACCESS_KEY')
-AWS_SES_REGION_NAME = getenv('AWS_SES_REGION_NAME')
-AWS_SES_REGION_ENDPOINT = f'email.{AWS_SES_REGION_NAME}.amazonaws.com'
-AWS_SES_FROM_EMAIL = getenv('AWS_SES_FROM_EMAIL')
+AUTH_EMAIL_SETTINGS = get_email_settings("AUTH", development_mode=DEVELOPMENT_MODE)
+AUTH_NOTIFICATION_FROM_EMAIL = AUTH_EMAIL_SETTINGS.from_email
+DEFAULT_FROM_EMAIL = AUTH_NOTIFICATION_FROM_EMAIL
+SERVER_EMAIL = AUTH_NOTIFICATION_FROM_EMAIL
+AWS_SES_ACCESS_KEY_ID = AUTH_EMAIL_SETTINGS.access_key_id
+AWS_SES_SECRET_ACCESS_KEY = AUTH_EMAIL_SETTINGS.secret_access_key
+AWS_SES_REGION_NAME = AUTH_EMAIL_SETTINGS.region_name
+AWS_SES_FROM_EMAIL = AUTH_EMAIL_SETTINGS.from_email
+AWS_SES_CONFIGURATION_SET = AUTH_EMAIL_SETTINGS.configuration_set
+AWS_SES_RETURN_PATH = AUTH_EMAIL_SETTINGS.return_path
 USE_SES_V2 = True
+AWS_SES_REGION_ENDPOINT = (
+    f'email.{AWS_SES_REGION_NAME}.amazonaws.com'
+    if AWS_SES_REGION_NAME
+    else ''
+)
+
+# Configuracion de correo Auth.
+# Si SES no esta completamente configurado, usar backend de consola para evitar
+# registros 500 por falta de region/credenciales en ambientes locales.
+EMAIL_BACKEND = getenv('EMAIL_BACKEND')
+if not EMAIL_BACKEND:
+    if AUTH_EMAIL_SETTINGS.provider == "ses" and AUTH_EMAIL_SETTINGS.is_complete:
+        EMAIL_BACKEND = 'django_ses.SESBackend'
+    else:
+        EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
+
+AUTH_EMAIL_DELIVERY_FAIL_OPEN = getenv('AUTH_EMAIL_DELIVERY_FAIL_OPEN', 'True') == 'True'
 
 # Configuración de dominio y nombre del sitio
 DOMAIN = getenv('DOMAIN')
@@ -209,7 +228,9 @@ DJOSER = {
     'USER_CREATE_PASSWORD_RETYPE': True,  # True
     'PASSWORD_RESET_CONFIRM_RETYPE': True,
     'TOKEN_MODEL': None,
-    'SOCIAL_AUTH_ALLOWED_REDIRECT_URIS': getenv('REDIRECT_URIS').split(','),
+    'SOCIAL_AUTH_ALLOWED_REDIRECT_URIS': [
+        uri for uri in getenv('REDIRECT_URIS', '').split(',') if uri
+    ],
 
     # Rutas hacia las clases personalizadas de correo por aplicacion.
     'EMAIL': {
