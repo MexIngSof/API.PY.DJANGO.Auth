@@ -1,0 +1,176 @@
+{% extends "auth_emails/refapart/base.html" %}
+{% load i18n %}
+
+{% block subject %}REFAPART - Registro recibido{% endblock subject %}
+
+{% block email_title %}
+REFAPART - Registro recibido
+{% endblock email_title %}
+
+{% block preheader %}
+Recibimos tu registro en REFAPART. Confirma tu correo para activar tu cuenta.
+{% endblock preheader %}
+
+{% block text_body %}
+Hola{% if user %} {{ user.email }}{% endif %}.
+
+Gracias por registrarte en REFAPART.
+
+Recibimos correctamente tu solicitud de registro.
+
+Para proteger tu cuenta y activar tu acceso, confirma tu correo electrónico desde el siguiente enlace:
+
+{{ action_url }}
+
+Después de confirmar tu cuenta podrás:
+
+1. Buscar refacciones nuevas, usadas y difíciles de encontrar.
+2. Guardar solicitudes de piezas.
+3. Recibir cotizaciones.
+4. Dar seguimiento a tus solicitudes.
+5. Recibir notificaciones importantes sobre tus búsquedas y pedidos.
+
+Si tú no realizaste este registro, puedes ignorar este correo.
+
+{% if support_email %}
+Soporte:
+{{ support_email }}
+{% endif %}
+
+REFAPART
+Encuentra cualquier pieza.
+{% endblock text_body %}
+
+{% block headline %}
+Registro recibido
+{% endblock headline %}
+
+{% block intro %}
+Gracias por crear tu cuenta en REFAPART. Ya recibimos tu registro correctamente.
+{% endblock intro %}
+
+{% block detail %}
+Para activar tu acceso y proteger tus solicitudes, confirma tu correo electrónico. Después podrás comenzar a buscar piezas, solicitar cotizaciones y dar seguimiento a tus refacciones.
+{% endblock detail %}
+
+{% block cta %}
+Confirmar mi cuenta
+{% endblock cta %}
+
+{% block extra_content %}
+<tr>
+  <td class="rp-section" style="padding:0 32px 30px;background:#FFFFFF;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#F7F8FA;border:1px solid #E1E4EA;border-radius:14px;">
+      <tr>
+        <td style="padding:18px;">
+          <div style="font-size:13px;line-height:1.45;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#E50914;">
+            ¿Qué podrás hacer en REFAPART?
+          </div>
+
+          <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#5D6573;">
+            Una vez confirmada tu cuenta, podrás usar REFAPART para buscar piezas automotrices, comparar opciones y dar seguimiento a tus solicitudes desde un solo lugar.
+          </p>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin-top:14px;">
+            <tr>
+              <td width="28" valign="top" style="width:28px;font-size:14px;line-height:1.6;color:#E50914;font-weight:900;">
+                1.
+              </td>
+              <td valign="top" style="font-size:14px;line-height:1.6;color:#171A20;">
+                Buscar refacciones nuevas, usadas y difíciles de encontrar.
+              </td>
+            </tr>
+
+            <tr>
+              <td width="28" valign="top" style="width:28px;font-size:14px;line-height:1.6;color:#E50914;font-weight:900;">
+                2.
+              </td>
+              <td valign="top" style="font-size:14px;line-height:1.6;color:#171A20;">
+                Guardar solicitudes para que REFAPART dé seguimiento a la pieza que necesitas.
+              </td>
+            </tr>
+
+            <tr>
+              <td width="28" valign="top" style="width:28px;font-size:14px;line-height:1.6;color:#E50914;font-weight:900;">
+                3.
+              </td>
+              <td valign="top" style="font-size:14px;line-height:1.6;color:#171A20;">
+                Recibir cotizaciones y comparar opciones disponibles.
+              </td>
+            </tr>
+
+            <tr>
+              <td width="28" valign="top" style="width:28px;font-size:14px;line-height:1.6;color:#E50914;font-weight:900;">
+                4.
+              </td>
+              <td valign="top" style="font-size:14px;line-height:1.6;color:#171A20;">
+                Dar seguimiento a tus búsquedas, pedidos y notificaciones importantes.
+              </td>
+            </tr>
+          </table>
+
+          {% if support_email %}
+          <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#5D6573;">
+            Soporte:
+            <a href="mailto:{{ support_email }}" style="color:#E50914;font-weight:700;text-decoration:none;">
+              {{ support_email }}
+            </a>
+          </p>
+          {% endif %}
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>
+{% endblock extra_content %}
+
+{% comment %}
+==============================================================================
+ÁREA RESERVADA PARA PUBLICIDAD / PROMOCIONES REFAPART
+==============================================================================
+
+Estado:
+NO IMPLEMENTADA.
+
+Esta plantilla usa el bloque de publicidad centralizado en base.html.
+
+Variables futuras sugeridas desde backend:
+
+- show_advertising_area
+- advertising_title
+- advertising_text
+- advertising_image_url
+- advertising_alt
+- advertising_url
+- advertising_cta
+
+Uso recomendado:
+Este correo puede aceptar publicidad futura con menor riesgo que los correos
+de seguridad, porque funciona como bienvenida/registro.
+
+Solo activar publicidad si:
+- el usuario aceptó comunicaciones comerciales;
+- el contenido es interno de REFAPART;
+- no distrae del objetivo principal: confirmar la cuenta;
+- el banner no desplaza el botón principal;
+- ya fue probado en Gmail, Outlook, Apple Mail, Android e iPhone.
+
+Ejemplos futuros:
+- beneficios de crear cuenta;
+- piezas más buscadas;
+- campañas por temporada;
+- cupones de bienvenida;
+- proveedores destacados;
+- guía rápida para usar REFAPART;
+- campañas para talleres.
+
+Reglas técnicas:
+- No usar JavaScript.
+- No usar CSS externo.
+- Usar estilos inline.
+- Usar imágenes HTTPS o CID.
+- Incluir texto ALT.
+- Mantener máximo 600px de ancho.
+- No depender de fuentes externas.
+==============================================================================
+{% endcomment %}

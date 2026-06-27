@@ -40,6 +40,14 @@ class CustomUserCreatePasswordRetypeSerializer(UserCreatePasswordRetypeSerialize
     def validate(self, attrs):
         role = attrs.pop("role", None)
         application_code = attrs.pop("ApplicationCode", "")
+        request = self.context.get("request")
+        if not application_code and request is not None:
+            application_code = (
+                request.headers.get("X-Application-Code")
+                or request.data.get("application_code")
+                or request.query_params.get("application_code")
+                or ""
+            )
 
         if application_code:
             application = Applications.objects.filter(

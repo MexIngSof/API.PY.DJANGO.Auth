@@ -1,0 +1,332 @@
+{% load i18n %}
+
+{% block subject %}{% endblock subject %}
+
+{% block text_body %}{% endblock text_body %}
+
+{% block html_body %}
+<!doctype html>
+<html lang="es-MX">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="x-ua-compatible" content="ie=edge">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
+  <title>{% block email_title %}REFAPART{% endblock email_title %}</title>
+
+  <style>
+    body {
+      margin: 0 !important;
+      padding: 0 !important;
+      width: 100% !important;
+      background: #F3F4F6 !important;
+      -webkit-text-size-adjust: 100%;
+      -ms-text-size-adjust: 100%;
+    }
+
+    table {
+      border-collapse: collapse !important;
+      mso-table-lspace: 0pt;
+      mso-table-rspace: 0pt;
+    }
+
+    img {
+      border: 0;
+      outline: none;
+      text-decoration: none;
+      -ms-interpolation-mode: bicubic;
+      display: block;
+    }
+
+    a {
+      text-decoration: none;
+    }
+
+    .rp-container {
+      width: 640px;
+      max-width: 640px;
+    }
+
+    @media only screen and (max-width: 640px) {
+      .rp-wrapper {
+        padding: 18px 10px !important;
+      }
+
+      .rp-container {
+        width: 100% !important;
+        max-width: 100% !important;
+        border-radius: 14px !important;
+      }
+
+      .rp-section {
+        padding-left: 18px !important;
+        padding-right: 18px !important;
+      }
+
+      .rp-logo {
+        max-width: 190px !important;
+      }
+
+      .rp-headline {
+        font-size: 25px !important;
+        line-height: 1.18 !important;
+      }
+
+      .rp-button {
+        display: block !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+        text-align: center !important;
+      }
+
+      .rp-trust-column {
+        display: block !important;
+        width: 100% !important;
+        padding: 0 0 14px 0 !important;
+      }
+
+      .rp-mobile-center {
+        text-align: center !important;
+      }
+    }
+  </style>
+</head>
+
+<body style="margin:0;padding:0;background:#F3F4F6;font-family:Arial,Helvetica,sans-serif;color:#171A20;">
+
+  <!-- Preheader oculto -->
+  <div style="display:none;max-height:0;overflow:hidden;opacity:0;color:transparent;mso-hide:all;">
+    {% block preheader %}REFAPART - Encuentra cualquier pieza.{% endblock preheader %}
+  </div>
+
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#F3F4F6;">
+    <tr>
+      <td align="center" class="rp-wrapper" style="padding:36px 16px;">
+
+        <table role="presentation" width="640" cellpadding="0" cellspacing="0" class="rp-container" style="width:640px;max-width:640px;background:#FFFFFF;border:1px solid #D9D9D9;border-radius:18px;overflow:hidden;">
+
+          <!-- Header -->
+          <tr>
+            <td class="rp-section" style="padding:28px 32px;background:#050505;border-bottom:4px solid #E50914;">
+
+              {% if logo_cid %}
+                <img src="cid:{{ logo_cid }}" width="220" alt="REFAPART - Encuentra cualquier pieza." class="rp-logo" style="width:220px;max-width:220px;height:auto;">
+              {% elif logo_url %}
+                <img src="{{ logo_url }}" width="220" alt="REFAPART - Encuentra cualquier pieza." class="rp-logo" style="width:220px;max-width:220px;height:auto;">
+              {% else %}
+                <div style="font-size:28px;line-height:1;font-weight:900;letter-spacing:.08em;color:#FFFFFF;">
+                  REF<span style="color:#E50914;">A</span>PART
+                </div>
+                <div style="margin-top:8px;font-size:10px;line-height:1.4;font-weight:700;letter-spacing:.28em;text-transform:uppercase;color:#D9D9D9;">
+                  Encuentra cualquier pieza.
+                </div>
+              {% endif %}
+
+            </td>
+          </tr>
+
+          <!-- Encabezado del correo -->
+          <tr>
+            <td class="rp-section" style="padding:34px 32px 18px;background:#FFFFFF;">
+              <div style="margin:0 0 10px;font-size:12px;line-height:1.4;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#E50914;">
+                {{ commercial_name|default:"REFAPART" }}
+              </div>
+
+              <h1 class="rp-headline" style="margin:0;color:#050505;font-size:32px;line-height:1.15;font-weight:900;letter-spacing:-.03em;">
+                {% block headline %}{% endblock headline %}
+              </h1>
+            </td>
+          </tr>
+
+          <!-- Contenido principal -->
+          <tr>
+            <td class="rp-section" style="padding:10px 32px 30px;background:#FFFFFF;">
+              <p style="margin:0 0 16px;font-size:16px;line-height:1.65;color:#171A20;">
+                Hola{% if user %} {{ user.email }}{% endif %}.
+              </p>
+
+              <p style="margin:0 0 14px;font-size:16px;line-height:1.65;color:#171A20;">
+                {% block intro %}{% endblock intro %}
+              </p>
+
+              <p style="margin:0 0 26px;font-size:15px;line-height:1.65;color:#5D6573;">
+                {% block detail %}{% endblock detail %}
+              </p>
+
+              {% if action_url %}
+                <table role="presentation" cellpadding="0" cellspacing="0" style="border-collapse:collapse;">
+                  <tr>
+                    <td align="center" bgcolor="#E50914" style="border-radius:10px;background:#E50914;">
+                      <a href="{{ action_url }}" target="_blank" class="rp-button" style="display:inline-block;padding:14px 24px;border-radius:10px;background:#E50914;color:#FFFFFF;font-size:15px;line-height:1.2;font-weight:900;text-decoration:none;">
+                        {% block cta %}{% endblock cta %}
+                      </a>
+                    </td>
+                  </tr>
+                </table>
+
+                <p style="margin:24px 0 0;font-size:13px;line-height:1.65;color:#5D6573;">
+                  Si el botón no abre, copia y pega este enlace:
+                  <br>
+                  <span style="word-break:break-all;color:#171A20;">{{ action_url }}</span>
+                </p>
+              {% endif %}
+            </td>
+          </tr>
+
+          <!-- Bloque opcional de contenido extra -->
+          {% block extra_content %}{% endblock extra_content %}
+
+          <!-- Seguridad -->
+          <tr>
+            <td class="rp-section" style="padding:0 32px 30px;background:#FFFFFF;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#F7F8FA;border:1px solid #E1E4EA;border-radius:14px;">
+                <tr>
+                  <td style="padding:18px;">
+                    <div style="font-size:13px;line-height:1.45;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#E50914;">
+                      Seguridad de cuenta
+                    </div>
+                    <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#5D6573;">
+                      Si no solicitaste esta acción, ignora este correo o contacta soporte para proteger tus solicitudes, cotizaciones y seguimiento de refacciones.
+                    </p>
+
+                    {% if support_email %}
+                      <p style="margin:10px 0 0;font-size:13px;line-height:1.6;color:#5D6573;">
+                        Soporte:
+                        <a href="mailto:{{ support_email }}" style="color:#E50914;font-weight:700;text-decoration:none;">
+                          {{ support_email }}
+                        </a>
+                      </p>
+                    {% endif %}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Publicidad futura -->
+          {% comment %}
+          ==========================================================================
+          ÁREA RESERVADA PARA PUBLICIDAD / PROMOCIONES REFAPART
+
+          Estado actual:
+          NO IMPLEMENTADA.
+
+          Activación futura sugerida:
+          El backend podrá enviar show_advertising_area=True y variables como:
+
+          advertising_title
+          advertising_text
+          advertising_image_url
+          advertising_alt
+          advertising_url
+          advertising_cta
+
+          Reglas:
+          - No activar en correos críticos sin autorización.
+          - No usar JavaScript.
+          - No usar CSS externo.
+          - No usar imágenes inseguras.
+          - Usar HTTPS o CID.
+          - Incluir texto ALT.
+          - Mantener máximo 600px.
+          - Validar consentimiento de comunicación comercial.
+          ==========================================================================
+          {% endcomment %}
+
+          {% if show_advertising_area %}
+          <tr>
+            <td class="rp-section" style="padding:0 32px 30px;background:#FFFFFF;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;background:#101216;border:1px solid #2A2E36;border-radius:14px;">
+                <tr>
+                  <td align="center" style="padding:24px;">
+                    {% if advertising_image_url %}
+                      <img src="{{ advertising_image_url }}" width="560" alt="{{ advertising_alt|default:'Promoción REFAPART' }}" style="width:100%;max-width:560px;height:auto;border-radius:10px;margin:0 0 16px;">
+                    {% endif %}
+
+                    <div style="font-size:12px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;color:#E50914;">
+                      {{ advertising_title|default:"Espacio reservado" }}
+                    </div>
+
+                    <p style="margin:10px 0 0;font-size:14px;line-height:1.65;color:#D9D9D9;">
+                      {{ advertising_text|default:"Área preparada para futuras promociones REFAPART." }}
+                    </p>
+
+                    {% if advertising_url %}
+                      <p style="margin:16px 0 0;">
+                        <a href="{{ advertising_url }}" target="_blank" style="display:inline-block;padding:11px 18px;border-radius:8px;background:#E50914;color:#FFFFFF;font-size:13px;font-weight:900;text-decoration:none;">
+                          {{ advertising_cta|default:"Ver promoción" }}
+                        </a>
+                      </p>
+                    {% endif %}
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          {% endif %}
+
+          <!-- Confianza REFAPART -->
+          <tr>
+            <td style="padding:22px 32px;background:#101216;border-top:1px solid #2A2E36;border-bottom:1px solid #2A2E36;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td class="rp-trust-column" width="33.33%" style="width:33.33%;padding:0 8px 0 0;vertical-align:top;">
+                    <div style="font-size:12px;font-weight:900;color:#E50914;text-transform:uppercase;">Solicitudes</div>
+                    <div style="margin-top:5px;font-size:13px;line-height:1.45;color:#FFFFFF;">Seguimiento de piezas</div>
+                  </td>
+
+                  <td class="rp-trust-column" width="33.33%" style="width:33.33%;padding:0 8px;vertical-align:top;">
+                    <div style="font-size:12px;font-weight:900;color:#E50914;text-transform:uppercase;">Cotizaciones</div>
+                    <div style="margin-top:5px;font-size:13px;line-height:1.45;color:#FFFFFF;">Comparación de opciones</div>
+                  </td>
+
+                  <td class="rp-trust-column" width="33.33%" style="width:33.33%;padding:0 0 0 8px;vertical-align:top;">
+                    <div style="font-size:12px;font-weight:900;color:#E50914;text-transform:uppercase;">Refacciones</div>
+                    <div style="margin-top:5px;font-size:13px;line-height:1.45;color:#FFFFFF;">Nuevas, usadas y difíciles</div>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td class="rp-section" style="padding:22px 32px;background:#050505;color:#AEB4BF;">
+              <p style="margin:0 0 8px;font-size:12px;line-height:1.6;">
+                Este correo fue enviado por {{ commercial_name|default:"REFAPART" }}.
+              </p>
+
+              <p style="margin:0 0 8px;font-size:12px;line-height:1.6;">
+                REFAPART protege tu cuenta para solicitudes, cotizaciones y seguimiento de refacciones.
+              </p>
+
+              {% if frontend_url %}
+                <p style="margin:0 0 8px;font-size:12px;line-height:1.6;">
+                  Sitio web:
+                  <a href="{{ frontend_url }}" target="_blank" style="color:#FFFFFF;text-decoration:none;font-weight:700;">
+                    {{ frontend_url }}
+                  </a>
+                </p>
+              {% endif %}
+
+              <p style="margin:0;font-size:11px;line-height:1.6;color:#777E8A;">
+                Por seguridad, no compartas tus enlaces de acceso. Este mensaje puede contener información relacionada con tu cuenta.
+              </p>
+
+              {% if current_year %}
+                <p style="margin:12px 0 0;font-size:11px;line-height:1.6;color:#777E8A;">
+                  © {{ current_year }} {{ commercial_name|default:"REFAPART" }}. Todos los derechos reservados.
+                </p>
+              {% endif %}
+            </td>
+          </tr>
+
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+{% endblock html_body %}

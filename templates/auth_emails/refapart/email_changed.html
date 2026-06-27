@@ -1,0 +1,167 @@
+{% extends "auth_emails/refapart/base.html" %}
+{% load i18n %}
+
+{% block subject %}REFAPART - Correo actualizado{% endblock subject %}
+
+{% block email_title %}
+REFAPART - Correo actualizado
+{% endblock email_title %}
+
+{% block preheader %}
+El correo de tu cuenta REFAPART fue actualizado correctamente.
+{% endblock preheader %}
+
+{% block text_body %}
+Hola{% if user %} {{ user.email }}{% endif %}.
+
+El correo asociado a tu cuenta REFAPART fue actualizado correctamente.
+
+Si tú realizaste este cambio, no necesitas hacer nada más.
+
+A partir de ahora, las notificaciones relacionadas con tu cuenta, solicitudes, cotizaciones, pedidos y seguimiento de refacciones llegarán a este correo.
+
+Si no reconoces este cambio, actúa de inmediato:
+
+1. Intenta iniciar sesión en REFAPART.
+2. Cambia tu contraseña.
+3. Contacta al equipo de soporte.
+
+{% if frontend_url %}
+Ir a REFAPART:
+{{ frontend_url }}
+{% endif %}
+
+{% if support_email %}
+Soporte:
+{{ support_email }}
+{% endif %}
+
+REFAPART
+Encuentra cualquier pieza.
+{% endblock text_body %}
+
+{% block headline %}
+Correo actualizado
+{% endblock headline %}
+
+{% block intro %}
+El correo asociado a tu cuenta REFAPART fue actualizado correctamente.
+{% endblock intro %}
+
+{% block detail %}
+A partir de ahora, este será el correo usado para notificaciones de cuenta, solicitudes, cotizaciones, pedidos y seguimiento de refacciones.
+{% endblock detail %}
+
+{% block cta %}
+Ir a REFAPART
+{% endblock cta %}
+
+{% block extra_content %}
+<tr>
+  <td class="rp-section" style="padding:0 32px 30px;background:#FFFFFF;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;background:#F7F8FA;border:1px solid #E1E4EA;border-radius:14px;">
+      <tr>
+        <td style="padding:18px;">
+          <div style="font-size:13px;line-height:1.45;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#E50914;">
+            ¿No reconoces este cambio?
+          </div>
+
+          <p style="margin:8px 0 0;font-size:14px;line-height:1.65;color:#5D6573;">
+            Si tú no solicitaste este cambio, te recomendamos actuar de inmediato para proteger tu cuenta REFAPART.
+          </p>
+
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="width:100%;border-collapse:collapse;margin-top:14px;">
+            <tr>
+              <td width="28" valign="top" style="width:28px;font-size:14px;line-height:1.6;color:#E50914;font-weight:900;">
+                1.
+              </td>
+              <td valign="top" style="font-size:14px;line-height:1.6;color:#171A20;">
+                Intenta iniciar sesión en REFAPART.
+              </td>
+            </tr>
+
+            <tr>
+              <td width="28" valign="top" style="width:28px;font-size:14px;line-height:1.6;color:#E50914;font-weight:900;">
+                2.
+              </td>
+              <td valign="top" style="font-size:14px;line-height:1.6;color:#171A20;">
+                Cambia tu contraseña cuanto antes.
+              </td>
+            </tr>
+
+            <tr>
+              <td width="28" valign="top" style="width:28px;font-size:14px;line-height:1.6;color:#E50914;font-weight:900;">
+                3.
+              </td>
+              <td valign="top" style="font-size:14px;line-height:1.6;color:#171A20;">
+                Contacta al equipo de soporte para revisar la seguridad de tu cuenta.
+              </td>
+            </tr>
+          </table>
+
+          {% if support_email %}
+          <p style="margin:14px 0 0;font-size:13px;line-height:1.6;color:#5D6573;">
+            Soporte:
+            <a href="mailto:{{ support_email }}" style="color:#E50914;font-weight:700;text-decoration:none;">
+              {{ support_email }}
+            </a>
+          </p>
+          {% endif %}
+        </td>
+      </tr>
+    </table>
+  </td>
+</tr>
+{% endblock extra_content %}
+
+{% comment %}
+==============================================================================
+ÁREA RESERVADA PARA PUBLICIDAD / PROMOCIONES REFAPART
+==============================================================================
+
+Estado:
+NO IMPLEMENTADA.
+
+Esta plantilla hereda del base.html el bloque futuro:
+
+{% if show_advertising_area %}
+  ...
+{% endif %}
+
+Variables futuras sugeridas:
+
+- show_advertising_area
+- advertising_title
+- advertising_text
+- advertising_image_url
+- advertising_alt
+- advertising_url
+- advertising_cta
+
+Uso recomendado:
+Este correo es sensible porque confirma un cambio de seguridad.
+Por defecto, NO se recomienda mostrar publicidad aquí.
+
+Solo activar publicidad si:
+- la acción ya fue validada;
+- el usuario aceptó comunicaciones comerciales;
+- la publicidad no distrae del mensaje principal;
+- el bloque comercial es interno de REFAPART;
+- el contenido no reduce la claridad de seguridad.
+
+Ejemplos futuros:
+- aviso de centro de ayuda;
+- tips de seguridad;
+- beneficios para usuarios verificados;
+- guía para proteger la cuenta;
+- promociones internas no invasivas.
+
+Reglas:
+- No usar JavaScript.
+- No usar CSS externo.
+- Usar imágenes HTTPS o CID.
+- Incluir texto ALT.
+- Mantener estilos inline.
+- Probar en Gmail, Outlook, Apple Mail, Android e iPhone.
+==============================================================================
+{% endcomment %}

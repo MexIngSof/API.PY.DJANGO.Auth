@@ -71,6 +71,8 @@ def provider_name(email_config=None):
 def classify_email_error(exc):
     message = str(exc)
     normalized = message.lower()
+    if "accessdenied" in normalized or "not authorized" in normalized or "not authorised" in normalized:
+        return "SES_ACCESS_DENIED"
     if "region" in normalized:
         return "SES_REGION_MISSING"
     if "credential" in normalized or "signature" in normalized or "access key" in normalized:
@@ -153,6 +155,13 @@ class AuthTransactionalEmailMixin:
 
         if application is None:
             application = Applications.objects.filter(Code="TECNOTELEC", IsActive=True).first()
+
+        user = context.get("user")
+        if application is None and getattr(user, "idApp", None):
+            application = Applications.objects.filter(
+                ApplicationID=user.idApp,
+                IsActive=True,
+            ).first()
 
         email_settings = None
         template = None
@@ -245,7 +254,12 @@ class AuthTransactionalEmailMixin:
 
         try:
             response = super().send(to, *args, **kwargs)
-            delivery_log.Status = "SENT" if response else "FAILED"
+            extra_headers = getattr(self, "extra_headers", {})
+            ses_status = str(extra_headers.get("status") or "")
+            ses_message_id = extra_headers.get("message_id")
+            ses_request_id = extra_headers.get("request_id")
+            provider_accepted = bool(response) or ses_status == "200" or bool(ses_message_id or ses_request_id)
+            delivery_log.Status = "SENT" if provider_accepted else "FAILED"
             delivery_log.ProviderResponseCode = str(response)
             delivery_log.ProviderResponsePayload = {
                 "backend": getattr(settings, "EMAIL_BACKEND", ""),
@@ -253,18 +267,37 @@ class AuthTransactionalEmailMixin:
                 "config_source": resolved_email_settings.source,
                 "project_code": resolved_email_settings.project_code,
                 "provider_complete": resolved_email_settings.is_complete,
+                "ses_status": extra_headers.get("status"),
+                "ses_message_id": ses_message_id,
+                "ses_request_id": ses_request_id,
             }
-            delivery_log.SentAt = timezone.now() if response else None
-            if not response:
+            delivery_log.ProviderMessageId = ses_message_id or ""
+            delivery_log.ProviderRequestId = ses_request_id or ""
+            delivery_log.SentAt = timezone.now() if provider_accepted else None
+            if not provider_accepted:
                 delivery_log.LastErrorCode = "EMAIL_PROVIDER_UNAVAILABLE"
-                delivery_log.FailureReason = "Email backend returned no accepted recipients."
+                delivery_log.FailureReason = (
+                    extra_headers.get("error_message")
+                    or extra_headers.get("reason")
+                    or "Email backend returned no accepted recipients."
+                )
                 delivery_log.ErrorMessage = delivery_log.FailureReason
+                delivery_log.ProviderResponsePayload = {
+                    **delivery_log.ProviderResponsePayload,
+                    "ses_status": extra_headers.get("status"),
+                    "ses_reason": extra_headers.get("reason"),
+                    "ses_error_code": extra_headers.get("error_code"),
+                    "ses_error_message": extra_headers.get("error_message"),
+                    "ses_request_id": extra_headers.get("request_id"),
+                }
             delivery_log.save(
                 update_fields=[
                     "Status",
                     "ProviderResponseCode",
                     "ProviderResponsePayload",
                     "SentAt",
+                    "ProviderMessageId",
+                    "ProviderRequestId",
                     "LastErrorCode",
                     "FailureReason",
                     "ErrorMessage",
