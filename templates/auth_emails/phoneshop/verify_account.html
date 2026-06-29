@@ -1,0 +1,14 @@
+{% extends "auth_emails/tecnotelec/base.html" %}
+
+{% block subject %}Tecno Telec - activa tu cuenta{% endblock subject %}
+{% block text_body %}Hola{% if user %} {{ user.email }}{% endif %}.
+
+Tu cuenta de Tecno Telec esta casi lista.
+Confirma tu correo para activar el acceso:
+{{ action_url }}
+
+Si no solicitaste esta cuenta, ignora este correo.{% endblock text_body %}
+{% block headline %}Activa tu cuenta Tecno Telec{% endblock headline %}
+{% block intro %}Tu cuenta esta casi lista para cotizar y dar seguimiento a tus soluciones.{% endblock intro %}
+{% block detail %}Confirma tu correo para habilitar el acceso seguro a la plataforma.{% endblock detail %}
+{% block cta %}Activar cuenta{% endblock cta %}
