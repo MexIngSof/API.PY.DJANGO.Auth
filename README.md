@@ -108,11 +108,29 @@ Auth agrega sobre Djoser una capa custom de plantillas por aplicacion:
 "Auth"."EmailDeliveryLogs"
 ```
 
-Las plantillas nuevas no viven en `templates/djoser/email/`; viven en la tabla
-`"Auth"."TransactionalEmailTemplates"`. Auth no expone endpoints REST para
-consultar ni renderizar correos; las plantillas se leen internamente con ORM
-durante el envio. Para inspeccionarlas o editarlas se usa administracion interna
-o SQL filtrando por:
+Las plantillas oficiales versionadas viven en:
+
+```text
+templates/auth_emails/<application_code>/<action>.html
+```
+
+Ejemplo REFAPART:
+
+```text
+templates/auth_emails/refapart/verify_account.html
+templates/auth_emails/refapart/register.html
+templates/auth_emails/refapart/password_reset.html
+templates/auth_emails/refapart/password_changed.html
+templates/auth_emails/refapart/email_reset.html
+templates/auth_emails/refapart/email_changed.html
+```
+
+La tabla `"Auth"."TransactionalEmailTemplates"` no es la fuente principal de
+HTML. Se conserva como fallback administrativo cuando no exista archivo
+versionado para una aplicacion/accion. Auth no expone endpoints REST publicos
+para consultar ni renderizar correos.
+
+Si se inspecciona el fallback de BD, filtrar por:
 
 ```text
 ApplicationId + ActionCode + LanguageCode + Channel
@@ -124,11 +142,19 @@ La configuracion visual/remitente por web vive en
 
 Las clases custom de `auth.custom_email` son las que toman la decision. En cada
 envio leen `ApplicationCode`, `application_code` o `X-Application-Code`,
-resuelven la aplicacion activa y buscan una plantilla activa para la accion de
-Djoser. Si la aplicacion tiene `RedirectBaseUrl`, el enlace apunta al frontend
-de esa web; si no, usa el dominio recibido por Djoser. Si no hay plantilla
-activa, usa los templates HTML locales de Djoser solo como fallback neutral de
-compatibilidad.
+resuelven la aplicacion activa y buscan primero el archivo HTML versionado de
+esa aplicacion. Si no existe archivo, usan el fallback de
+`"Auth"."TransactionalEmailTemplates"`. Si tampoco existe fallback de BD, usan
+los templates locales de Djoser como ultimo recurso de compatibilidad.
+
+La prioridad obligatoria es:
+
+```text
+FILE -> DB_FALLBACK -> DJOSER_FALLBACK
+```
+
+Si la aplicacion tiene `RedirectBaseUrl`, el enlace apunta al frontend de esa
+web; si no, usa el dominio recibido por Djoser.
 
 Acciones sembradas:
 

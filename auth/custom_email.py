@@ -1,5 +1,8 @@
 import hashlib
 import logging
+import re
+from email.mime.image import MIMEImage
+from pathlib import Path
 
 from django.conf import settings
 from django.template import Context, Template, TemplateDoesNotExist
@@ -36,6 +39,15 @@ ACTION_TEMPLATE_NAMES = {
     ACTION_EMAIL_RESET: "email_reset",
     ACTION_EMAIL_CHANGED: "email_changed",
 }
+
+TEMPLATE_SOURCE_FILE = "FILE"
+TEMPLATE_SOURCE_DB_FALLBACK = "DB_FALLBACK"
+TEMPLATE_SOURCE_DJOSER_FALLBACK = "DJOSER_FALLBACK"
+
+REFAPART_TEMPLATE_PREFIX = "auth_emails/refapart/"
+REFAPART_LOGO_CONTENT_ID = "refapart-logo"
+REFAPART_LOGO_FILENAME = "refapart-logo-with-tagline.png"
+REFAPART_LOGO_PATH = Path("templates/auth_emails/refapart/assets") / REFAPART_LOGO_FILENAME
 
 
 def mask_email(email_address):
@@ -137,7 +149,13 @@ class AuthTransactionalEmailMixin:
         self.auth_email_application = application
         self.auth_email_settings = email_settings
         self.auth_email_template = template
-        self.template_name = self.resolve_template_name(application)
+        self.auth_email_file_template_name = self.resolve_file_template_name(application)
+        self.auth_email_template_source = self.resolve_template_source(
+            self.auth_email_file_template_name,
+            template,
+        )
+        if self.auth_email_file_template_name:
+            self.template_name = self.auth_email_file_template_name
         return context
 
     def resolve_email_metadata(self, context):
@@ -153,15 +171,23 @@ class AuthTransactionalEmailMixin:
         if application_code:
             application = Applications.objects.filter(Code=application_code, IsActive=True).first()
 
-        if application is None:
-            application = Applications.objects.filter(Code="TECNOTELEC", IsActive=True).first()
-
         user = context.get("user")
         if application is None and getattr(user, "idApp", None):
             application = Applications.objects.filter(
                 ApplicationID=user.idApp,
                 IsActive=True,
             ).first()
+
+        if application is None:
+            logger.warning(
+                "auth.email.application.unresolved",
+                extra={
+                    "event": "auth.email.application.unresolved",
+                    "action_code": self.action_code,
+                    "requested_application_code": application_code,
+                    "has_user_application": bool(getattr(user, "idApp", None)),
+                },
+            )
 
         email_settings = None
         template = None
@@ -181,10 +207,10 @@ class AuthTransactionalEmailMixin:
 
         return application, email_settings, template
 
-    def resolve_template_name(self, application):
+    def resolve_file_template_name(self, application):
         action_template_name = ACTION_TEMPLATE_NAMES.get(self.action_code)
         if application is None or not action_template_name:
-            return self.template_name
+            return ""
 
         custom_template_name = (
             f"auth_emails/{application.Code.lower()}/{action_template_name}.html"
@@ -192,14 +218,103 @@ class AuthTransactionalEmailMixin:
         try:
             get_template(custom_template_name)
         except TemplateDoesNotExist:
-            return self.template_name
+            return ""
         return custom_template_name
+
+    def resolve_template_source(self, file_template_name, db_template):
+        if file_template_name:
+            return TEMPLATE_SOURCE_FILE
+        if db_template is not None:
+            return TEMPLATE_SOURCE_DB_FALLBACK
+        return TEMPLATE_SOURCE_DJOSER_FALLBACK
+
+    def render_block_from_file_template(self, file_template_name, block_name, context):
+        template = get_template(file_template_name)
+        origin_name = getattr(getattr(template, "origin", None), "name", "")
+        if not origin_name:
+            return ""
+
+        with open(origin_name, encoding="utf-8") as template_file:
+            source = template_file.read()
+
+        pattern = (
+            r"{%\s*block\s+"
+            + re.escape(block_name)
+            + r"\s*%}(.*?){%\s*endblock(?:\s+"
+            + re.escape(block_name)
+            + r")?\s*%}"
+        )
+        match = re.search(pattern, source, flags=re.DOTALL)
+        if not match:
+            return ""
+
+        return Template(match.group(1)).render(Context(context)).strip()
+
+    def render_html_from_file_template(self, file_template_name, context):
+        rendered = get_template(file_template_name).render(context)
+        doctype_index = rendered.lower().find("<!doctype html>")
+        if doctype_index >= 0:
+            return rendered[doctype_index:].strip()
+        return rendered.strip()
+
+    def attach_file_template_inline_assets(self, file_template_name):
+        if not file_template_name.startswith(REFAPART_TEMPLATE_PREFIX):
+            return
+
+        if not hasattr(self, "attachments"):
+            self.attachments = []
+
+        content_id = f"<{REFAPART_LOGO_CONTENT_ID}>"
+        for attachment in getattr(self, "attachments", []):
+            if hasattr(attachment, "get") and attachment.get("Content-ID") == content_id:
+                return
+
+        logo_path = Path(settings.BASE_DIR) / REFAPART_LOGO_PATH
+        if not logo_path.exists():
+            logger.warning(
+                "auth.email.inline_asset.missing",
+                extra={
+                    "event": "auth.email.inline_asset.missing",
+                    "template_path": file_template_name,
+                    "asset_path": str(logo_path),
+                    "content_id": REFAPART_LOGO_CONTENT_ID,
+                },
+            )
+            return
+
+        logo = MIMEImage(logo_path.read_bytes(), _subtype="png")
+        logo.add_header("Content-ID", content_id)
+        logo.add_header("Content-Disposition", "inline", filename=REFAPART_LOGO_FILENAME)
+        self.attach(logo)
 
     def render(self):
         context = self.get_context_data()
         template = getattr(self, "auth_email_template", None)
+        template_source = getattr(
+            self,
+            "auth_email_template_source",
+            TEMPLATE_SOURCE_DJOSER_FALLBACK,
+        )
+        file_template_name = getattr(self, "auth_email_file_template_name", "")
 
-        if template is None:
+        if template_source == TEMPLATE_SOURCE_FILE:
+            self.subject = self.render_block_from_file_template(
+                file_template_name,
+                "subject",
+                context,
+            )
+            self.auth_email_text_body = self.render_block_from_file_template(
+                file_template_name,
+                "text_body",
+                context,
+            )
+            self.body = ""
+            self.html = self.render_html_from_file_template(file_template_name, context)
+            self._attach_body()
+            self.attach_file_template_inline_assets(file_template_name)
+            return
+
+        if template_source != TEMPLATE_SOURCE_DB_FALLBACK:
             return super().render()
 
         render_context = Context(context)
@@ -214,6 +329,12 @@ class AuthTransactionalEmailMixin:
         application = getattr(self, "auth_email_application", None)
         email_settings = getattr(self, "auth_email_settings", None)
         template = getattr(self, "auth_email_template", None)
+        file_template_name = getattr(self, "auth_email_file_template_name", "")
+        template_source = getattr(
+            self,
+            "auth_email_template_source",
+            TEMPLATE_SOURCE_DJOSER_FALLBACK,
+        )
         user = self.context.get("user") if hasattr(self, "context") else None
         to_email = to[0] if isinstance(to, (list, tuple)) and to else str(to)
         request = getattr(self, "request", None)
@@ -249,6 +370,12 @@ class AuthTransactionalEmailMixin:
                 "config_source": resolved_email_settings.source,
                 "project_code": resolved_email_settings.project_code,
                 "provider_complete": resolved_email_settings.is_complete,
+                "template_source": template_source,
+                "resolved_template_path": file_template_name,
+                "application_code": application_code,
+                "action_code": self.action_code,
+                "has_db_template": template is not None,
+                "has_file_template": bool(file_template_name),
             },
         )
 
@@ -267,6 +394,12 @@ class AuthTransactionalEmailMixin:
                 "config_source": resolved_email_settings.source,
                 "project_code": resolved_email_settings.project_code,
                 "provider_complete": resolved_email_settings.is_complete,
+                "template_source": template_source,
+                "resolved_template_path": file_template_name,
+                "application_code": application_code,
+                "action_code": self.action_code,
+                "has_db_template": template is not None,
+                "has_file_template": bool(file_template_name),
                 "ses_status": extra_headers.get("status"),
                 "ses_message_id": ses_message_id,
                 "ses_request_id": ses_request_id,
@@ -305,9 +438,13 @@ class AuthTransactionalEmailMixin:
             )
             logger.info(
                 "auth.email.delivery.%s",
-                "sent" if response else "failed",
+                "sent" if provider_accepted else "failed",
                 extra={
-                    "event": "auth.email.delivery.sent" if response else "auth.email.delivery.failed",
+                    "event": (
+                        "auth.email.delivery.sent"
+                        if provider_accepted
+                        else "auth.email.delivery.failed"
+                    ),
                     "application_code": application_code,
                     "action_code": self.action_code,
                     "email_hash": hash_email(to_email),
@@ -333,6 +470,12 @@ class AuthTransactionalEmailMixin:
                 "config_source": resolved_email_settings.source,
                 "project_code": resolved_email_settings.project_code,
                 "provider_complete": resolved_email_settings.is_complete,
+                "template_source": template_source,
+                "resolved_template_path": file_template_name,
+                "application_code": application_code,
+                "action_code": self.action_code,
+                "has_db_template": template is not None,
+                "has_file_template": bool(file_template_name),
             }
             delivery_log.save(
                 update_fields=[

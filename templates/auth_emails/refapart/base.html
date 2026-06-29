@@ -110,18 +110,14 @@
           <tr>
             <td class="rp-section" style="padding:28px 32px;background:#050505;border-bottom:4px solid #E50914;">
 
-              {% if logo_cid %}
-                <img src="cid:{{ logo_cid }}" width="220" alt="REFAPART - Encuentra cualquier pieza." class="rp-logo" style="width:220px;max-width:220px;height:auto;">
-              {% elif logo_url %}
-                <img src="{{ logo_url }}" width="220" alt="REFAPART - Encuentra cualquier pieza." class="rp-logo" style="width:220px;max-width:220px;height:auto;">
-              {% else %}
-                <div style="font-size:28px;line-height:1;font-weight:900;letter-spacing:.08em;color:#FFFFFF;">
-                  REF<span style="color:#E50914;">A</span>PART
-                </div>
-                <div style="margin-top:8px;font-size:10px;line-height:1.4;font-weight:700;letter-spacing:.28em;text-transform:uppercase;color:#D9D9D9;">
-                  Encuentra cualquier pieza.
-                </div>
-              {% endif %}
+              <img
+                src="cid:refapart-logo"
+                width="220"
+                height="48"
+                alt="REFAPART - Encuentra cualquier pieza."
+                class="rp-logo"
+                style="width:220px;max-width:220px;height:auto;"
+              >
 
             </td>
           </tr>
