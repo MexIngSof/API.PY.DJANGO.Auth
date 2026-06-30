@@ -46,7 +46,7 @@ TEMPLATE_SOURCE_DJOSER_FALLBACK = "DJOSER_FALLBACK"
 
 REFAPART_TEMPLATE_PREFIX = "auth_emails/refapart/"
 REFAPART_LOGO_CONTENT_ID = "refapart-logo"
-REFAPART_LOGO_FILENAME = "refapart-logo-with-tagline.png"
+REFAPART_LOGO_FILENAME = "refapart-logo-horizontal.png"
 REFAPART_LOGO_PATH = Path("templates/auth_emails/refapart/assets") / REFAPART_LOGO_FILENAME
 
 
