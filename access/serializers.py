@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from django.contrib.auth import get_user_model
+
 from access.models import (
     AccessAuditEvents,
     Actions,
@@ -22,6 +24,7 @@ from access.models import (
     UserSessions,
 )
 from roles.models import Roles
+from roles.models import UserRoles
 
 
 class ApplicationSerializer(serializers.ModelSerializer):
@@ -117,7 +120,7 @@ class ActionSerializer(serializers.ModelSerializer):
 class RoleSerializer(serializers.ModelSerializer):
     class Meta:
         model = Roles
-        fields = ["RoleID", "Name", "Description", "CreatedAt", "UpdatedAt"]
+        fields = ["RoleID", "Name", "DisplayName", "Description", "CreatedAt", "UpdatedAt"]
         read_only_fields = ["CreatedAt", "UpdatedAt"]
 
 
@@ -295,3 +298,67 @@ class AccessAuditEventSerializer(serializers.ModelSerializer):
             "CreatedAt",
         ]
         read_only_fields = fields
+
+
+class IdentityUserSerializer(serializers.ModelSerializer):
+    application = serializers.SerializerMethodField()
+    roles = serializers.SerializerMethodField()
+    direct_permissions = serializers.SerializerMethodField()
+
+    class Meta:
+        model = get_user_model()
+        fields = [
+            "id",
+            "email",
+            "first_name",
+            "last_name",
+            "is_active",
+            "is_staff",
+            "is_superuser",
+            "must_change_password",
+            "idApp",
+            "application",
+            "roles",
+            "direct_permissions",
+        ]
+        read_only_fields = ["email", "idApp", "application", "roles", "direct_permissions"]
+
+    def get_application(self, obj):
+        application = Applications.objects.filter(ApplicationID=obj.idApp).first()
+        if application is None:
+            return None
+        return {
+            "id": application.ApplicationID,
+            "code": application.Code,
+            "name": application.Name,
+            "is_active": application.IsActive,
+        }
+
+    def get_roles(self, obj):
+        roles = Roles.objects.filter(userroles__UserID=obj).order_by("Name")
+        return [
+            {
+                "id": role.RoleID,
+                "name": role.Name,
+                "display_name": role.DisplayName or role.Name,
+                "description": role.Description,
+            }
+            for role in roles
+        ]
+
+    def get_direct_permissions(self, obj):
+        rows = UserPermissions.objects.filter(UserID=obj).select_related(
+            "PermissionID",
+            "PermissionID__ModuleID",
+        ).order_by("PermissionID__Code")
+        return [
+            {
+                "id": row.id,
+                "permission_id": row.PermissionID_id,
+                "code": row.PermissionID.Code,
+                "module": row.PermissionID.ModuleID.Code if row.PermissionID.ModuleID_id else None,
+                "allow": row.Allow,
+                "reason": row.Reason,
+            }
+            for row in rows
+        ]

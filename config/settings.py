@@ -90,30 +90,50 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
-# Configuración de base de datos, dependiendo del entorno
-if DEVELOPMENT_MODE is True:
-    # Configuración para base de datos en desarrollo (PostgreSQL en Docker, por ejemplo)
+def build_postgres_database_config():
+    database_url = getenv('DATABASE_URL')
+    if database_url:
+        config = dj_database_url.parse(database_url)
+        config.setdefault("OPTIONS", {})
+        config["OPTIONS"]["options"] = getenv(
+            "POSTGRES_OPTIONS",
+            f"-c search_path=public,\"{DB_SCHEMA}\"",
+        )
+        return config
 
-    DATABASES = {
-        "default": {
-            "ENGINE": getenv("DB_ENGINE", "django.db.backends.postgresql"),
-            "NAME": getenv("DB_NAME"),
-            "USER": getenv("DB_USER"),
-            "PASSWORD": getenv("DB_PASSWORD"),
-            "HOST": getenv("DB_HOST", "localhost"),
-            "PORT": getenv("DB_PORT", "5432"),
-            "OPTIONS": {
-            "options": f"-c search_path=public,\"{DB_SCHEMA}\""
-            },
-        }
+    db_name = getenv("DB_NAME") or getenv("POSTGRES_DB") or getenv("AUTH_DB_NAME") or "auth"
+    db_user = getenv("DB_USER") or getenv("POSTGRES_USER") or getenv("AUTH_DB_USER") or "auth_user"
+    db_password = getenv("DB_PASSWORD") or getenv("POSTGRES_PASSWORD") or getenv("AUTH_DB_PASSWORD")
+    db_host = getenv("DB_HOST") or getenv("POSTGRES_HOST") or "localhost"
+    db_port = getenv("DB_PORT") or getenv("POSTGRES_PORT") or "5432"
+
+    if not db_password and len(sys.argv) > 1 and sys.argv[1] != "collectstatic":
+        raise RuntimeError(
+            "Auth database password is not configured. Set DB_PASSWORD, "
+            "POSTGRES_PASSWORD or AUTH_DB_PASSWORD for local checks. "
+            "SQLite is not allowed for Auth."
+        )
+
+    return {
+        "ENGINE": getenv("DB_ENGINE", "django.db.backends.postgresql"),
+        "NAME": db_name,
+        "USER": db_user,
+        "PASSWORD": db_password or "",
+        "HOST": db_host,
+        "PORT": db_port,
+        "OPTIONS": {
+            "options": getenv(
+                "POSTGRES_OPTIONS",
+                f"-c search_path=public,\"{DB_SCHEMA}\"",
+            )
+        },
     }
-elif len(sys.argv) > 0 and sys.argv[1] != 'collectstatic':
-    # Si no estamos en modo de desarrollo y no estamos ejecutando collectstatic
-    if getenv('DATABASE_URL', None) is None:
-        raise Exception("DATABASE_URL enviroment variable not defined")
-    DATABASES = {
-        'default': dj_database_url.parse(getenv('DATABASE_URL'))
-    }
+
+
+# Configuracion PostgreSQL unica para desarrollo y produccion. SQLite no esta permitido.
+DATABASES = {
+    "default": build_postgres_database_config()
+}
 
 AUTH_EMAIL_SETTINGS = get_email_settings("AUTH", development_mode=DEVELOPMENT_MODE)
 AUTH_NOTIFICATION_FROM_EMAIL = AUTH_EMAIL_SETTINGS.from_email

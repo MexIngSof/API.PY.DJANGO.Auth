@@ -20,6 +20,7 @@ from access.models import (
     AccessAuditEvents,
     Applications,
     LoginAttempts,
+    PasswordHistory,
     RefreshTokens,
     SocialLoginAttempts,
     SocialProviders,
@@ -303,10 +304,67 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 httponly=settings.AUTH_COOKIE_HTTP_ONLY,
                 samesite=settings.AUTH_COOKIE_SAMESITE,
             )
+            if user:
+                application = get_application(get_application_code(request))
+                response.data["user"] = {
+                    "id": user.id,
+                    "email": user.email,
+                    "first_name": user.first_name,
+                    "last_name": user.last_name,
+                    "must_change_password": user.must_change_password,
+                    "application": application.Code if application else "",
+                }
         else:
             record_login_attempt(request, email, False, "invalid_credentials", user=user)
 
         return response
+
+
+class RequiredPasswordChangeView(APIView):
+    def post(self, request, *args, **kwargs):
+        if not request.user or not request.user.is_authenticated:
+            return Response(
+                {"detail": "Authentication credentials were not provided."},
+                status=status.HTTP_401_UNAUTHORIZED,
+            )
+
+        current_password = request.data.get("current_password") or request.data.get("currentPassword")
+        new_password = request.data.get("new_password") or request.data.get("newPassword")
+        re_new_password = request.data.get("re_new_password") or request.data.get("reNewPassword") or new_password
+
+        if not current_password or not new_password:
+            return Response(
+                {"detail": "current_password and new_password are required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if new_password != re_new_password:
+            return Response(
+                {"detail": "New password confirmation does not match."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if len(new_password) < 12:
+            return Response(
+                {"detail": "New password must contain at least 12 characters."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if not request.user.check_password(current_password):
+            return Response(
+                {"detail": "Current password is invalid."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        request.user.set_password(new_password)
+        request.user.must_change_password = False
+        request.user.save(update_fields=["password", "must_change_password"])
+        PasswordHistory.objects.create(UserID=request.user, PasswordHash=request.user.password)
+        record_access_event(
+            request,
+            "identity.password.changed",
+            user=request.user,
+            application=get_application(get_application_code(request)),
+            metadata={"required_change": True},
+        )
+        return Response({"detail": "Password changed successfully."})
 
 
 class CustomTokenRefreshView(TokenRefreshView):

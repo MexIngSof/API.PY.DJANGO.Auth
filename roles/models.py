@@ -5,6 +5,7 @@ from django.db import models
 class Roles(models.Model):
     RoleID = models.AutoField(primary_key=True, db_column="Id")
     Name = models.CharField(max_length=100, unique=True, db_column="Name")
+    DisplayName = models.CharField(max_length=160, null=True, blank=True, db_column="DisplayName")
     Description = models.TextField(null=True, blank=True, db_column="Description")
     CreatedAt = models.DateTimeField(auto_now_add=True, db_column="CreatedAt")
     UpdatedAt = models.DateTimeField(auto_now=True, db_column="UpdatedAt")

@@ -4,7 +4,8 @@ from .views import (
     CustomTokenObtainPairView,
     CustomTokenRefreshView,
     CustomTokenVerifyView,
-    LogoutView
+    LogoutView,
+    RequiredPasswordChangeView,
 )
 
 urlpatterns = [
@@ -24,6 +25,7 @@ urlpatterns = [
     path('jwt/create/', CustomTokenObtainPairView.as_view()),
     path('jwt/refresh/', CustomTokenRefreshView.as_view()),
     path('jwt/verify/', CustomTokenVerifyView.as_view()),
+    path('password/change-required/', RequiredPasswordChangeView.as_view()),
 
     # ==========================
     # LOGOUT PERSONALIZADO

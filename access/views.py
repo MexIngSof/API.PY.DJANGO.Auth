@@ -1,4 +1,5 @@
-from rest_framework import viewsets
+from django.contrib.auth import get_user_model
+from rest_framework import status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -29,6 +30,7 @@ from access.serializers import (
     ActionSerializer,
     ApplicationPermissionSerializer,
     ApplicationRoleSerializer,
+    IdentityUserSerializer,
     ApplicationSerializer,
     LoginAttemptSerializer,
     MfaMethodSerializer,
@@ -46,7 +48,7 @@ from access.serializers import (
     UserPermissionSerializer,
     UserSessionSerializer,
 )
-from roles.models import Roles
+from roles.models import Roles, UserRoles
 
 
 def get_application_code(request):
@@ -54,6 +56,14 @@ def get_application_code(request):
         request.query_params.get("application_code")
         or request.query_params.get("ApplicationCode")
         or request.headers.get("X-Application-Code")
+        or ""
+    ).strip().upper()
+
+
+def get_admin_application_filter(request):
+    return (
+        request.query_params.get("application_code")
+        or request.query_params.get("ApplicationCode")
         or ""
     ).strip().upper()
 
@@ -102,10 +112,62 @@ class RoleViewSet(AdminModelViewSet):
     queryset = Roles.objects.all().order_by("Name")
     serializer_class = RoleSerializer
 
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        application_code = get_admin_application_filter(self.request)
+        if application_code:
+            queryset = queryset.filter(
+                applicationroles__ApplicationID__Code=application_code,
+                applicationroles__ApplicationID__IsActive=True,
+            )
+        return queryset.distinct().order_by("Name")
+
+    @action(detail=True, methods=["patch"], url_path="permissions")
+    def set_permissions(self, request, pk=None):
+        role = self.get_object()
+        permission_ids = request.data.get("permission_ids") or request.data.get("PermissionIds")
+        permission_codes = request.data.get("permission_codes") or request.data.get("PermissionCodes")
+
+        permissions = Permissions.objects.none()
+        if permission_ids is not None:
+            permissions = Permissions.objects.filter(PermissionID__in=permission_ids)
+        elif permission_codes is not None:
+            permissions = Permissions.objects.filter(Code__in=permission_codes)
+        else:
+            return Response(
+                {"detail": "permission_ids or permission_codes is required."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        RolePermissions.objects.filter(RoleID=role).delete()
+        for permission in permissions:
+            RolePermissions.objects.get_or_create(RoleID=role, PermissionID=permission)
+
+        AccessAuditEvents.objects.create(
+            UserID=request.user,
+            EventType="identity.role.permissions.updated",
+            Metadata={
+                "role_id": role.RoleID,
+                "role_name": role.Name,
+                "permission_codes": list(permissions.values_list("Code", flat=True)),
+            },
+        )
+        return Response(RoleSerializer(role).data)
+
 
 class PermissionViewSet(AdminModelViewSet):
     queryset = Permissions.objects.select_related("ModuleID", "ActionID").all().order_by("Code")
     serializer_class = PermissionSerializer
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        application_code = get_admin_application_filter(self.request)
+        if application_code:
+            queryset = queryset.filter(
+                applicationpermissions__ApplicationID__Code=application_code,
+                applicationpermissions__ApplicationID__IsActive=True,
+            )
+        return queryset.distinct().order_by("Code")
 
 
 class RolePermissionViewSet(AdminModelViewSet):
@@ -166,6 +228,162 @@ class RecoveryCodeViewSet(AdminModelViewSet):
 class AccessAuditEventViewSet(AdminModelViewSet):
     queryset = AccessAuditEvents.objects.select_related("UserID", "ApplicationID").all().order_by("-CreatedAt")
     serializer_class = AccessAuditEventSerializer
+
+
+class IdentityUserViewSet(AdminModelViewSet):
+    serializer_class = IdentityUserSerializer
+
+    def get_queryset(self):
+        User = get_user_model()
+        queryset = User.objects.all().order_by("email")
+        application_code = get_admin_application_filter(self.request)
+        search = (
+            self.request.query_params.get("search")
+            or self.request.query_params.get("q")
+            or ""
+        ).strip()
+
+        if application_code:
+            application = Applications.objects.filter(
+                Code=application_code,
+                IsActive=True,
+            ).first()
+            if application is None:
+                return queryset.none()
+            queryset = queryset.filter(idApp=application.ApplicationID)
+
+        if search:
+            queryset = queryset.filter(email__icontains=search)
+
+        return queryset
+
+    @action(detail=True, methods=["post"], url_path="roles")
+    def assign_role(self, request, pk=None):
+        user = self.get_object()
+        role_id = request.data.get("role_id") or request.data.get("RoleId")
+        role_name = request.data.get("role_name") or request.data.get("RoleName")
+
+        role = None
+        if role_id:
+            role = Roles.objects.filter(RoleID=role_id).first()
+        elif role_name:
+            role = Roles.objects.filter(Name=str(role_name).strip()).first()
+
+        if role is None:
+            return Response({"detail": "Role not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        application_code = get_admin_application_filter(request)
+        if application_code:
+            allowed = ApplicationRoles.objects.filter(
+                ApplicationID__Code=application_code,
+                ApplicationID__IsActive=True,
+                RoleID=role,
+            ).exists()
+            if not allowed:
+                return Response(
+                    {"detail": "Role is not registered for this application."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        UserRoles.objects.get_or_create(UserID=user, RoleID=role)
+        AccessAuditEvents.objects.create(
+            UserID=request.user,
+            EventType="identity.user.role.assigned",
+            Metadata={
+                "target_user_id": user.id,
+                "target_user_email": user.email,
+                "role_id": role.RoleID,
+                "role_name": role.Name,
+                "application_code": application_code,
+            },
+        )
+        return Response(self.get_serializer(user).data)
+
+    @action(detail=True, methods=["delete"], url_path=r"roles/(?P<role_id>[^/.]+)")
+    def remove_role(self, request, pk=None, role_id=None):
+        user = self.get_object()
+        deleted, _ = UserRoles.objects.filter(UserID=user, RoleID_id=role_id).delete()
+        AccessAuditEvents.objects.create(
+            UserID=request.user,
+            EventType="identity.user.role.removed",
+            Metadata={
+                "target_user_id": user.id,
+                "target_user_email": user.email,
+                "role_id": role_id,
+                "deleted": deleted,
+                "application_code": get_admin_application_filter(request),
+            },
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"], url_path="permissions")
+    def assign_permission(self, request, pk=None):
+        user = self.get_object()
+        permission_id = request.data.get("permission_id") or request.data.get("PermissionId")
+        permission_code = request.data.get("permission_code") or request.data.get("PermissionCode")
+        allow = request.data.get("allow", request.data.get("Allow", True))
+        reason = request.data.get("reason") or request.data.get("Reason") or "Asignado desde JobCron."
+
+        permission = None
+        if permission_id:
+            permission = Permissions.objects.filter(PermissionID=permission_id).first()
+        elif permission_code:
+            permission = Permissions.objects.filter(Code=str(permission_code).strip()).first()
+
+        if permission is None:
+            return Response({"detail": "Permission not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        application_code = get_admin_application_filter(request)
+        if application_code:
+            allowed = ApplicationPermissions.objects.filter(
+                ApplicationID__Code=application_code,
+                ApplicationID__IsActive=True,
+                PermissionID=permission,
+            ).exists()
+            if not allowed:
+                return Response(
+                    {"detail": "Permission is not registered for this application."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        user_permission, _ = UserPermissions.objects.update_or_create(
+            UserID=user,
+            PermissionID=permission,
+            defaults={"Allow": bool(allow), "Reason": reason},
+        )
+        AccessAuditEvents.objects.create(
+            UserID=request.user,
+            EventType="identity.user.permission.updated",
+            Metadata={
+                "target_user_id": user.id,
+                "target_user_email": user.email,
+                "permission_id": permission.PermissionID,
+                "permission_code": permission.Code,
+                "allow": user_permission.Allow,
+                "application_code": application_code,
+            },
+        )
+        return Response(self.get_serializer(user).data)
+
+    @action(detail=True, methods=["delete"], url_path=r"permissions/(?P<permission_id>[^/.]+)")
+    def remove_permission(self, request, pk=None, permission_id=None):
+        user = self.get_object()
+        deleted, _ = UserPermissions.objects.filter(
+            UserID=user,
+            PermissionID_id=permission_id,
+        ).delete()
+        AccessAuditEvents.objects.create(
+            UserID=request.user,
+            EventType="identity.user.permission.removed",
+            Metadata={
+                "target_user_id": user.id,
+                "target_user_email": user.email,
+                "permission_id": permission_id,
+                "deleted": deleted,
+                "application_code": get_admin_application_filter(request),
+            },
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class MePermissionsViewSet(viewsets.ViewSet):

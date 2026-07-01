@@ -14,6 +14,41 @@ API Django responsable de autenticacion, usuarios, roles y permisos.
 - Plantilla segura: `.env.local.example`.
 - Dependencias: `requirements.txt`.
 
+## Validacion local sin Docker
+
+Auth no usa SQLite. Para ejecutar checks desde la carpeta del API, cargar una
+configuracion PostgreSQL local antes de correr Django:
+
+```powershell
+cd Docker.API.PY\API.PY.DJANGO.Auth
+Copy-Item .env.local.example .env.local
+```
+
+Despues completar en `.env.local`:
+
+```text
+AUTH_DB_PASSWORD=<password local de auth_user>
+DJANGO_SECRET_KEY=<secret local de desarrollo>
+```
+
+Comando:
+
+```powershell
+python manage.py check
+```
+
+Tambien son validas estas variables equivalentes:
+
+```text
+DATABASE_URL
+DB_NAME / DB_USER / DB_PASSWORD / DB_HOST / DB_PORT
+POSTGRES_DB / POSTGRES_USER / POSTGRES_PASSWORD / POSTGRES_HOST / POSTGRES_PORT
+AUTH_DB_NAME / AUTH_DB_USER / AUTH_DB_PASSWORD
+```
+
+Si ninguna password esta configurada, el check falla de forma explicita para
+evitar regresar a SQLite o usar una conexion falsa.
+
 ## Tablas propias de Auth
 
 Las tablas de identidad, roles y permisos deben vivir en el schema `"Auth"`.
@@ -186,6 +221,10 @@ flujos propios de Auth para dispararse automaticamente.
 ## Permisos y roles
 
 - `Roles` define perfiles reutilizables.
+- `Roles.Name` es el codigo tecnico estable usado por APIs, migraciones y
+  permisos. No debe cambiarse solo para mejorar textos de UI.
+- `Roles.DisplayName` es el nombre visible para administradores en JobCron.
+- `Roles.Description` explica que permite hacer el rol en lenguaje operativo.
 - `Modules` define areas funcionales visibles o protegidas.
 - `Actions` define acciones atomicas (`view`, `create`, `update`, `delete`,
   `approve`, etc.).

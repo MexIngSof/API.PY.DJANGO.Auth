@@ -7,6 +7,7 @@ from access.views import (
     ApplicationPermissionViewSet,
     ApplicationRoleViewSet,
     ApplicationViewSet,
+    IdentityUserViewSet,
     LoginAttemptViewSet,
     MePermissionsViewSet,
     MfaMethodViewSet,
@@ -28,6 +29,7 @@ from access.views import (
 
 router = DefaultRouter()
 router.register("applications", ApplicationViewSet, basename="applications")
+router.register("identity/users", IdentityUserViewSet, basename="identity-users")
 router.register("social-providers", SocialProviderViewSet, basename="social-providers")
 router.register("social-accounts", UserSocialAccountViewSet, basename="social-accounts")
 router.register("social-login-attempts", SocialLoginAttemptViewSet, basename="social-login-attempts")
