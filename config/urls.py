@@ -1,5 +1,6 @@
 from django.contrib import admin
 from django.urls import path, include
+from user.views import CustomUserViewSet
 
 urlpatterns = [
     # Panel admin
@@ -9,6 +10,10 @@ urlpatterns = [
     # DJOSER – RUTAS BASE DE USUARIOS
     # =====================================
     # /api/users/, /api/users/me/, etc.
+    path(
+        'api/users/reset_password_confirm/',
+        CustomUserViewSet.as_view({'post': 'reset_password_confirm'}),
+    ),
     path('api/', include('djoser.urls')),
     # path('api/', include('djoser.urls.jwt')),    # /api/jwt/create/, /api/jwt/refresh/
 

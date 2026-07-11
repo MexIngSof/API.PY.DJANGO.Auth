@@ -3,6 +3,7 @@ import logging
 import re
 from email.mime.image import MIMEImage
 from pathlib import Path
+from urllib.parse import quote
 
 from django.conf import settings
 from django.template import Context, Template, TemplateDoesNotExist
@@ -67,6 +68,28 @@ def hash_email(email_address):
     return f"sha256:{hashlib.sha256(email_address.lower().encode()).hexdigest()}"
 
 
+def sanitize_email_error(message, email_address=""):
+    sanitized = str(message)
+    if email_address:
+        sanitized = sanitized.replace(email_address, mask_email(email_address))
+    return re.sub(
+        r"[\w.!#$%&'*+/=?^`{|}~-]+@[\w.-]+\.[A-Za-z]{2,}",
+        lambda match: mask_email(match.group(0)),
+        sanitized,
+    )
+
+
+def jobcron_password_reset_url(redirect_base_url, raw_url):
+    match = re.match(r"^(?:password-reset|reset-password)/([^/]+)/([^/]+)/?$", raw_url)
+    if not match:
+        return ""
+    uid, token = match.groups()
+    return (
+        f"{redirect_base_url.rstrip('/')}/reset-password"
+        f"?uid={quote(uid)}&token={quote(token)}"
+    )
+
+
 def provider_name(email_config=None):
     if email_config is not None:
         return email_config.provider.upper()
@@ -85,6 +108,8 @@ def classify_email_error(exc):
     normalized = message.lower()
     if "accessdenied" in normalized or "not authorized" in normalized or "not authorised" in normalized:
         return "SES_ACCESS_DENIED"
+    if "email address is not verified" in normalized or "identities failed the check" in normalized:
+        return "SES_EMAIL_NOT_VERIFIED"
     if "region" in normalized:
         return "SES_REGION_MISSING"
     if "credential" in normalized or "signature" in normalized or "access key" in normalized:
@@ -128,7 +153,14 @@ class AuthTransactionalEmailMixin:
         )
         raw_url = str(context.get("url", "")).lstrip("/")
         if email_settings is not None and email_settings.RedirectBaseUrl:
-            action_url = f"{email_settings.RedirectBaseUrl.rstrip('/')}/{raw_url}".rstrip("/")
+            jobcron_reset_url = (
+                jobcron_password_reset_url(email_settings.RedirectBaseUrl, raw_url)
+                if self.action_code == ACTION_PASSWORD_RESET
+                and application is not None
+                and application.Code == "JOBCRON"
+                else ""
+            )
+            action_url = jobcron_reset_url or f"{email_settings.RedirectBaseUrl.rstrip('/')}/{raw_url}".rstrip("/")
         else:
             action_url = f"{context.get('protocol')}://{context.get('domain')}/{raw_url}".rstrip("/")
 
@@ -326,6 +358,9 @@ class AuthTransactionalEmailMixin:
     def send(self, to, *args, **kwargs):
         from access.models import EmailDeliveryLogs
 
+        if not hasattr(self, "auth_email_template_source"):
+            self.get_context_data()
+
         application = getattr(self, "auth_email_application", None)
         email_settings = getattr(self, "auth_email_settings", None)
         template = getattr(self, "auth_email_template", None)
@@ -460,9 +495,10 @@ class AuthTransactionalEmailMixin:
             return response
         except Exception as exc:
             error_code = classify_email_error(exc)
+            sanitized_error = sanitize_email_error(str(exc), to_email)
             delivery_log.Status = "FAILED"
-            delivery_log.ErrorMessage = str(exc)
-            delivery_log.FailureReason = str(exc)
+            delivery_log.ErrorMessage = sanitized_error
+            delivery_log.FailureReason = sanitized_error
             delivery_log.LastErrorCode = error_code
             delivery_log.ProviderResponsePayload = {
                 "backend": getattr(settings, "EMAIL_BACKEND", ""),

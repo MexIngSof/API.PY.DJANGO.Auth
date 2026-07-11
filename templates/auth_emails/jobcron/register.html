@@ -1,12 +1,12 @@
-{% extends "auth_emails/tecnotelec/base.html" %}
+{% extends "auth_emails/jobcron/base.html" %}
 
-{% block subject %}Tecno Telec - cuenta creada{% endblock subject %}
+{% block subject %}JobCron - cuenta creada{% endblock subject %}
 {% block text_body %}Hola{% if user %} {{ user.email }}{% endif %}.
 
-Tu cuenta fue creada en Tecno Telec.
+Tu cuenta fue creada en JobCron.
 Continua aqui:
 {{ action_url }}{% endblock text_body %}
 {% block headline %}Cuenta creada correctamente{% endblock headline %}
-{% block intro %}Tu acceso a Tecno Telec fue registrado correctamente.{% endblock intro %}
-{% block detail %}Desde tu cuenta podras consultar informacion, solicitar cotizaciones y continuar procesos de proyecto.{% endblock detail %}
+{% block intro %}Tu acceso a JobCron fue registrado correctamente.{% endblock intro %}
+{% block detail %}Desde tu cuenta podras operar modulos, permisos y seguimiento interno segun tu rol.{% endblock detail %}
 {% block cta %}Ir a mi cuenta{% endblock cta %}

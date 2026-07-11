@@ -3,6 +3,10 @@ import hashlib
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.utils import timezone
+from django.utils.timezone import now
+from djoser.compat import get_user_email
+from djoser.conf import settings as djoser_settings
+from djoser.views import UserViewSet
 from djoser.social.views import ProviderAuthView
 from rest_framework import status
 from rest_framework.request import Request
@@ -365,6 +369,33 @@ class RequiredPasswordChangeView(APIView):
             metadata={"required_change": True},
         )
         return Response({"detail": "Password changed successfully."})
+
+
+class CustomUserViewSet(UserViewSet):
+    def reset_password_confirm(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        user = serializer.user
+        user.set_password(serializer.data["new_password"])
+        user.must_change_password = False
+        if hasattr(user, "last_login"):
+            user.last_login = now()
+        user.save()
+
+        record_access_event(
+            request,
+            "identity.password.reset.confirmed",
+            user=user,
+            application=get_application(get_application_code(request)),
+            metadata={"must_change_password": False},
+        )
+
+        if djoser_settings.PASSWORD_CHANGED_EMAIL_CONFIRMATION:
+            context = {"user": user}
+            to = [get_user_email(user)]
+            djoser_settings.EMAIL.password_changed_confirmation(request, context).send(to)
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
 class CustomTokenRefreshView(TokenRefreshView):

@@ -1,8 +1,5 @@
-from django.contrib.auth.hashers import make_password
 from django.db import migrations
 
-
-TEMP_PASSWORD = "JobCron.Admin#2026"
 
 APPLICATION = {
     "Code": "JOBCRON",
@@ -148,21 +145,36 @@ def seed_jobcron_admin_roles(apps, schema_editor):
                 PermissionID=permissions[permission_code],
             )
 
-    password_hash = make_password(TEMP_PASSWORD)
     for email, role_name, first_name, last_name, is_staff, is_superuser in USERS:
-        user, created = UserAccount.objects.update_or_create(
-            email=email,
-            defaults={
-                "password": password_hash,
-                "first_name": first_name,
-                "last_name": last_name,
-                "is_active": True,
-                "is_staff": is_staff,
-                "is_superuser": is_superuser,
-                "must_change_password": True,
-                "idApp": application.ApplicationID,
-            },
-        )
+        user = UserAccount.objects.filter(email=email).first()
+        created = user is None
+        if created:
+            user = UserAccount(
+                email=email,
+                first_name=first_name,
+                last_name=last_name,
+                is_active=True,
+                is_staff=is_staff,
+                is_superuser=is_superuser,
+                must_change_password=True,
+                idApp=application.ApplicationID,
+            )
+            user.set_unusable_password()
+            user.save()
+        update_fields = []
+        for field, value in (
+            ("first_name", first_name),
+            ("last_name", last_name),
+            ("is_active", True),
+            ("is_staff", is_staff),
+            ("is_superuser", is_superuser),
+            ("idApp", application.ApplicationID),
+        ):
+            if getattr(user, field) != value:
+                setattr(user, field, value)
+                update_fields.append(field)
+        if update_fields:
+            user.save(update_fields=update_fields)
         UserRoles.objects.get_or_create(UserID=user, RoleID=roles[role_name])
         if created:
             PasswordHistory.objects.create(UserID=user, PasswordHash=user.password)

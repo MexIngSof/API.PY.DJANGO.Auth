@@ -1,12 +1,12 @@
-{% extends "auth_emails/tecnotelec/base.html" %}
+{% extends "auth_emails/jobcron/base.html" %}
 
-{% block subject %}Tecno Telec - email actualizado{% endblock subject %}
+{% block subject %}JobCron - email actualizado{% endblock subject %}
 {% block text_body %}Hola{% if user %} {{ user.email }}{% endif %}.
 
 El email de tu cuenta fue actualizado.
 Revisa tu perfil aqui:
 {{ action_url }}{% endblock text_body %}
 {% block headline %}Email actualizado{% endblock headline %}
-{% block intro %}El email de tu cuenta Tecno Telec fue actualizado.{% endblock intro %}
+{% block intro %}El email de tu cuenta JobCron fue actualizado.{% endblock intro %}
 {% block detail %}Puedes revisar tus datos de contacto desde el perfil de usuario.{% endblock detail %}
 {% block cta %}Ir a mi perfil{% endblock cta %}

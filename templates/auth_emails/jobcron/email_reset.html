@@ -1,6 +1,6 @@
-{% extends "auth_emails/tecnotelec/base.html" %}
+{% extends "auth_emails/jobcron/base.html" %}
 
-{% block subject %}Tecno Telec - confirma cambio de email{% endblock subject %}
+{% block subject %}JobCron - confirma cambio de email{% endblock subject %}
 {% block text_body %}Hola{% if user %} {{ user.email }}{% endif %}.
 
 Confirma el cambio de email aqui:
