@@ -1,10 +1,9 @@
-from django.contrib import admin
 from django.urls import path, include
+from auth_health import health
 from user.views import CustomUserViewSet
 
 urlpatterns = [
-    # Panel admin
-    path('admin/', admin.site.urls),
+    path('api/health/', health),
 
     # =====================================
     # DJOSER – RUTAS BASE DE USUARIOS

@@ -14,6 +14,7 @@ from auth.email_settings import get_email_settings
 # ===============================
 PROJECT_NAME = "Auth"
 DB_SCHEMA = getenv("DB_SCHEMA", PROJECT_NAME)
+DB_RUNTIME_SCHEMA = getenv("AUTH_DB_RUNTIME_SCHEMA", f"{PROJECT_NAME}Runtime")
 
 # Definición de la ruta base del proyecto
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -38,11 +39,9 @@ ALLOWED_HOSTS = getenv('DJANGO_ALLOWED_HOSTS',
 
 # Definición de las aplicaciones instaladas en el proyecto
 INSTALLED_APPS = [
-    'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
-    'django.contrib.messages',
     'django.contrib.staticfiles',
     'corsheaders',  # Para manejar solicitudes de CORS
     'rest_framework',  # Para crear APIs RESTful
@@ -62,7 +61,6 @@ MIDDLEWARE = [
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
-    'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
@@ -80,7 +78,6 @@ TEMPLATES = [
                 'django.template.context_processors.debug',
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
-                'django.contrib.messages.context_processors.messages',
             ],
         },
     },
@@ -97,7 +94,7 @@ def build_postgres_database_config():
         config.setdefault("OPTIONS", {})
         config["OPTIONS"]["options"] = getenv(
             "POSTGRES_OPTIONS",
-            f"-c search_path=public,\"{DB_SCHEMA}\"",
+            f"-c search_path=\"{DB_SCHEMA}\",\"{DB_RUNTIME_SCHEMA}\"",
         )
         return config
 
@@ -124,7 +121,7 @@ def build_postgres_database_config():
         "OPTIONS": {
             "options": getenv(
                 "POSTGRES_OPTIONS",
-                f"-c search_path=public,\"{DB_SCHEMA}\"",
+                f"-c search_path=\"{DB_SCHEMA}\",\"{DB_RUNTIME_SCHEMA}\"",
             )
         },
     }

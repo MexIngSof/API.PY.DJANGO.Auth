@@ -3,6 +3,7 @@ from django.db import migrations, models
 
 REPAIR_AUTH_SCHEMA_SQL = """
 CREATE SCHEMA IF NOT EXISTS "Auth";
+CREATE SCHEMA IF NOT EXISTS "AuthRuntime";
 
 ALTER TABLE IF EXISTS "Auth".user_useraccount RENAME COLUMN id TO "Id";
 ALTER TABLE IF EXISTS "Auth".user_useraccount RENAME COLUMN password TO "Password";
@@ -16,20 +17,20 @@ ALTER TABLE IF EXISTS "Auth".user_useraccount RENAME COLUMN is_superuser TO "IsS
 ALTER TABLE IF EXISTS "Auth".user_useraccount RENAME COLUMN "idApp" TO "ApplicationId";
 ALTER TABLE IF EXISTS "Auth".user_useraccount RENAME TO "UserAccounts";
 
-ALTER TABLE IF EXISTS "Auth".auth_group SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".auth_group_permissions SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".auth_permission SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".django_admin_log SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".django_content_type SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".django_session SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".social_auth_association SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".social_auth_code SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".social_auth_nonce SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".social_auth_partial SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".social_auth_usersocialauth SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".user_useraccount_groups SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".user_useraccount_user_permissions SET SCHEMA public;
-ALTER TABLE IF EXISTS "Auth".django_migrations SET SCHEMA public;
+ALTER TABLE IF EXISTS public.auth_group SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.auth_group_permissions SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.auth_permission SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.django_session SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.social_auth_association SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.social_auth_code SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.social_auth_nonce SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.social_auth_partial SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.social_auth_usersocialauth SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.user_useraccount_groups SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.user_useraccount_user_permissions SET SCHEMA "Auth";
+ALTER TABLE IF EXISTS public.django_content_type SET SCHEMA "AuthRuntime";
+ALTER TABLE IF EXISTS public.django_migrations SET SCHEMA "AuthRuntime";
+DROP TABLE IF EXISTS public.django_admin_log CASCADE;
 """
 
 
