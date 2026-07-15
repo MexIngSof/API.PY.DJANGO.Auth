@@ -11,7 +11,7 @@ class Migration(migrations.Migration):
 
     dependencies = [
         ("roles", "0001_initial"),
-        migrations.swappable_dependency(settings.AUTH_USER_MODEL),
+        ("user", "0002_auth_schema_table"),
     ]
 
     operations = [
