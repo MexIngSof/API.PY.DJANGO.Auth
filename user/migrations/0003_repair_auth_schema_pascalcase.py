@@ -5,6 +5,55 @@ REPAIR_AUTH_SCHEMA_SQL = """
 CREATE SCHEMA IF NOT EXISTS "Auth";
 CREATE SCHEMA IF NOT EXISTS "AuthRuntime";
 
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'Auth' AND table_name = 'UserAccounts'
+    ) THEN
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'id')
+           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'Id') THEN
+            ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN id TO "Id";
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'password')
+           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'Password') THEN
+            ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN password TO "Password";
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'last_login')
+           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'LastLogin') THEN
+            ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN last_login TO "LastLogin";
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'first_name')
+           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'FirstName') THEN
+            ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN first_name TO "FirstName";
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'last_name')
+           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'LastName') THEN
+            ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN last_name TO "LastName";
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'email')
+           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'Email') THEN
+            ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN email TO "Email";
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'is_active')
+           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'IsActive') THEN
+            ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN is_active TO "IsActive";
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'is_staff')
+           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'IsStaff') THEN
+            ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN is_staff TO "IsStaff";
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'is_superuser')
+           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'IsSuperuser') THEN
+            ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN is_superuser TO "IsSuperuser";
+        END IF;
+        IF EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'idApp')
+           AND NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'Auth' AND table_name = 'UserAccounts' AND column_name = 'ApplicationId') THEN
+            ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN "idApp" TO "ApplicationId";
+        END IF;
+    END IF;
+END $$;
+
 ALTER TABLE IF EXISTS "Auth".user_useraccount RENAME COLUMN id TO "Id";
 ALTER TABLE IF EXISTS "Auth".user_useraccount RENAME COLUMN password TO "Password";
 ALTER TABLE IF EXISTS "Auth".user_useraccount RENAME COLUMN last_login TO "LastLogin";

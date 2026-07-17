@@ -1,3 +1,4 @@
+from django.contrib.auth.hashers import make_password
 from django.db import migrations
 
 
@@ -158,8 +159,8 @@ def seed_jobcron_admin_roles(apps, schema_editor):
                 is_superuser=is_superuser,
                 must_change_password=True,
                 idApp=application.ApplicationID,
+                password=make_password(None),
             )
-            user.set_unusable_password()
             user.save()
         update_fields = []
         for field, value in (

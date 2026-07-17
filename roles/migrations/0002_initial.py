@@ -15,6 +15,29 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunSQL(
+            sql="""
+            DO $$
+            BEGIN
+                IF EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'Auth'
+                      AND table_name = 'UserAccounts'
+                      AND column_name = 'id'
+                ) AND NOT EXISTS (
+                    SELECT 1
+                    FROM information_schema.columns
+                    WHERE table_schema = 'Auth'
+                      AND table_name = 'UserAccounts'
+                      AND column_name = 'Id'
+                ) THEN
+                    ALTER TABLE "Auth"."UserAccounts" RENAME COLUMN id TO "Id";
+                END IF;
+            END $$;
+            """,
+            reverse_sql=migrations.RunSQL.noop,
+        ),
         migrations.AddField(
             model_name="userroles",
             name="UserID",
