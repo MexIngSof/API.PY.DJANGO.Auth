@@ -20,6 +20,7 @@ from access.views import (
     RoleViewSet,
     SocialLoginAttemptViewSet,
     SocialProviderViewSet,
+    OwnUserSessionViewSet,
     UserSocialAccountViewSet,
     UserDeviceViewSet,
     UserPermissionViewSet,
@@ -47,6 +48,7 @@ router.register(
 )
 router.register("devices", UserDeviceViewSet, basename="devices")
 router.register("sessions", UserSessionViewSet, basename="sessions")
+router.register("me/sessions", OwnUserSessionViewSet, basename="me-sessions")
 router.register("refresh-tokens", RefreshTokenViewSet, basename="refresh-tokens")
 router.register("password-history", PasswordHistoryViewSet, basename="password-history")
 router.register("login-attempts", LoginAttemptViewSet, basename="login-attempts")

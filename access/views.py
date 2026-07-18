@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
-from rest_framework import status, viewsets
+from django.utils import timezone
+from rest_framework import mixins, status, viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAdminUser, IsAuthenticated
 from rest_framework.response import Response
@@ -35,6 +36,7 @@ from access.serializers import (
     LoginAttemptSerializer,
     MfaMethodSerializer,
     ModuleSerializer,
+    OwnUserSessionSerializer,
     PasswordHistorySerializer,
     PermissionSerializer,
     RecoveryCodeSerializer,
@@ -66,6 +68,44 @@ def get_admin_application_filter(request):
         or request.query_params.get("ApplicationCode")
         or ""
     ).strip().upper()
+
+
+def get_current_session(request):
+    refresh_hash = request.COOKIES.get("refresh")
+    if not refresh_hash:
+        return None
+    import hashlib
+
+    token_hash = hashlib.sha256(refresh_hash.encode("utf-8")).hexdigest()
+    return (
+        UserSessions.objects.filter(
+            UserID=request.user,
+            RefreshTokenHash=token_hash,
+            RevokedAt__isnull=True,
+        )
+        .order_by("-LastActivityAt")
+        .first()
+    )
+
+
+def audit_session_event(request, event_type, session=None, metadata=None):
+    application = None
+    application_code = get_application_code(request)
+    if application_code:
+        application = Applications.objects.filter(Code=application_code, IsActive=True).first()
+
+    AccessAuditEvents.objects.create(
+        UserID=request.user,
+        ApplicationID=application,
+        EventType=event_type,
+        IpAddress=request.META.get("REMOTE_ADDR"),
+        UserAgent=request.META.get("HTTP_USER_AGENT", ""),
+        Metadata={
+            "session_id": getattr(session, "SessionID", None),
+            "application_code": application_code,
+            **(metadata or {}),
+        },
+    )
 
 
 class AdminModelViewSet(viewsets.ModelViewSet):
@@ -198,6 +238,92 @@ class UserDeviceViewSet(AdminModelViewSet):
 class UserSessionViewSet(AdminModelViewSet):
     queryset = UserSessions.objects.select_related("UserID", "DeviceID", "ApplicationID").all().order_by("-LastActivityAt")
     serializer_class = UserSessionSerializer
+
+
+class OwnUserSessionViewSet(
+    mixins.ListModelMixin,
+    mixins.RetrieveModelMixin,
+    mixins.DestroyModelMixin,
+    viewsets.GenericViewSet,
+):
+    permission_classes = [IsAuthenticated]
+    serializer_class = OwnUserSessionSerializer
+    lookup_url_kwarg = "session_id"
+
+    def get_queryset(self):
+        queryset = UserSessions.objects.select_related(
+            "DeviceID",
+            "ApplicationID",
+        ).filter(UserID=self.request.user).order_by("-LastActivityAt")
+        application_code = get_application_code(self.request)
+        if application_code:
+            queryset = queryset.filter(ApplicationID__Code=application_code)
+        return queryset
+
+    def get_serializer_context(self):
+        context = super().get_serializer_context()
+        current_session = get_current_session(self.request)
+        context["current_session_id"] = (
+            current_session.SessionID if current_session is not None else None
+        )
+        return context
+
+    def destroy(self, request, *args, **kwargs):
+        session = self.get_object()
+        now_value = timezone.now()
+        session.RevokedAt = now_value
+        session.RevokedReason = "USER_REVOKED"
+        session.IsOnline = False
+        session.save(update_fields=["RevokedAt", "RevokedReason", "IsOnline"])
+        RefreshTokens.objects.filter(
+            UserID=request.user,
+            SessionID=session,
+            RevokedAt__isnull=True,
+        ).update(RevokedAt=now_value, RevokedReason="USER_REVOKED")
+        audit_session_event(request, "identity.session.revoked", session=session)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=False, methods=["post"], url_path="revoke-all")
+    def revoke_all(self, request):
+        keep_current = bool(request.data.get("keep_current", False))
+        current_session = get_current_session(request)
+        queryset = self.get_queryset().filter(RevokedAt__isnull=True)
+        if keep_current and current_session is not None:
+            queryset = queryset.exclude(SessionID=current_session.SessionID)
+
+        session_ids = list(queryset.values_list("SessionID", flat=True))
+        now_value = timezone.now()
+        updated = queryset.update(
+            RevokedAt=now_value,
+            RevokedReason="USER_REVOKED_ALL",
+            IsOnline=False,
+        )
+        refresh_query = RefreshTokens.objects.filter(
+            UserID=request.user,
+            SessionID_id__in=session_ids,
+            RevokedAt__isnull=True,
+        )
+        refresh_updated = refresh_query.update(
+            RevokedAt=now_value,
+            RevokedReason="USER_REVOKED_ALL",
+        )
+        audit_session_event(
+            request,
+            "identity.sessions.revoked_all",
+            session=current_session,
+            metadata={
+                "keep_current": keep_current,
+                "revoked_sessions": updated,
+                "revoked_refresh_tokens": refresh_updated,
+            },
+        )
+        return Response(
+            {
+                "revoked_sessions": updated,
+                "revoked_refresh_tokens": refresh_updated,
+                "kept_current": keep_current and current_session is not None,
+            }
+        )
 
 
 class RefreshTokenViewSet(AdminModelViewSet):

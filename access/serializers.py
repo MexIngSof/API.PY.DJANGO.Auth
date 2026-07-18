@@ -222,6 +222,47 @@ class UserSessionSerializer(serializers.ModelSerializer):
         read_only_fields = ["StartedAt", "LastActivityAt", "AccessTokenJti"]
 
 
+class OwnUserSessionSerializer(serializers.ModelSerializer):
+    application_code = serializers.CharField(source="ApplicationID.Code", read_only=True)
+    application_name = serializers.CharField(source="ApplicationID.Name", read_only=True)
+    device_name = serializers.CharField(source="DeviceID.DeviceName", read_only=True)
+    device_type = serializers.CharField(source="DeviceID.DeviceType", read_only=True)
+    browser = serializers.CharField(source="DeviceID.Browser", read_only=True)
+    operating_system = serializers.CharField(source="DeviceID.OperatingSystem", read_only=True)
+    ip_address = serializers.IPAddressField(source="DeviceID.IpAddress", read_only=True)
+    is_current = serializers.SerializerMethodField()
+    is_revoked = serializers.SerializerMethodField()
+
+    class Meta:
+        model = UserSessions
+        fields = [
+            "SessionID",
+            "application_code",
+            "application_name",
+            "device_name",
+            "device_type",
+            "browser",
+            "operating_system",
+            "ip_address",
+            "StartedAt",
+            "LastActivityAt",
+            "ExpiresAt",
+            "RevokedAt",
+            "RevokedReason",
+            "IsOnline",
+            "is_current",
+            "is_revoked",
+        ]
+        read_only_fields = fields
+
+    def get_is_current(self, obj):
+        current_session_id = self.context.get("current_session_id")
+        return bool(current_session_id and str(obj.SessionID) == str(current_session_id))
+
+    def get_is_revoked(self, obj):
+        return obj.RevokedAt is not None
+
+
 class RefreshTokenSerializer(serializers.ModelSerializer):
     class Meta:
         model = RefreshTokens
