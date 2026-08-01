@@ -276,10 +276,32 @@ class CustomProviderAuthView(ProviderAuthView):
 class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request: Request, *args, **kwargs) -> Response:
         email = (request.data.get("email") or "").strip().lower()
-        response = super().post(request, *args, **kwargs)
 
         User = get_user_model()
         user = User.objects.filter(email=email).first()
+
+        if (
+            user
+            and user.is_active
+            and user.must_change_password
+            and not user.has_usable_password()
+        ):
+            record_login_attempt(
+                request,
+                email,
+                False,
+                "password_setup_required",
+                user=user,
+            )
+            return Response(
+                {
+                    "code": "PASSWORD_SETUP_REQUIRED",
+                    "detail": "Password setup is required before login.",
+                },
+                status=status.HTTP_409_CONFLICT,
+            )
+
+        response = super().post(request, *args, **kwargs)
 
         if response.status_code == status.HTTP_200_OK:
             access_token = response.data.get("access")
@@ -372,6 +394,44 @@ class RequiredPasswordChangeView(APIView):
 
 
 class CustomUserViewSet(UserViewSet):
+    def reset_password(self, request, *args, **kwargs):
+        email = (request.data.get("email") or "").strip().lower()
+        application = get_application(get_application_code(request))
+        User = get_user_model()
+        user = User.objects.filter(email=email, is_active=True).first()
+
+        setup_pending = bool(
+            user
+            and application
+            and user.idApp == application.ApplicationID
+            and user.must_change_password
+            and not user.has_usable_password()
+        )
+        if not setup_pending:
+            return super().reset_password(request, *args, **kwargs)
+
+        try:
+            djoser_settings.EMAIL.password_reset(request, {"user": user}).send(
+                [user.email]
+            )
+        except Exception:
+            return Response(
+                {
+                    "code": "EMAIL_PROVIDER_UNAVAILABLE",
+                    "detail": "The access email could not be sent.",
+                },
+                status=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
+
+        record_access_event(
+            request,
+            "identity.password.setup.requested",
+            user=user,
+            application=application,
+            metadata={"first_access": True},
+        )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
     def reset_password_confirm(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
