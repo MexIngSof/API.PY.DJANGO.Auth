@@ -87,15 +87,22 @@ TEMPLATES = [
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
 
+
+def postgres_options():
+    if "test" in sys.argv:
+        return getenv("AUTH_TEST_POSTGRES_OPTIONS", '-c search_path=public,"Auth","AuthRuntime"')
+    return getenv(
+        "POSTGRES_OPTIONS",
+        f"-c search_path=\"{DB_SCHEMA}\",\"{DB_RUNTIME_SCHEMA}\"",
+    )
+
+
 def build_postgres_database_config():
     database_url = getenv('DATABASE_URL')
     if database_url:
         config = dj_database_url.parse(database_url)
         config.setdefault("OPTIONS", {})
-        config["OPTIONS"]["options"] = getenv(
-            "POSTGRES_OPTIONS",
-            f"-c search_path=\"{DB_SCHEMA}\",\"{DB_RUNTIME_SCHEMA}\"",
-        )
+        config["OPTIONS"]["options"] = postgres_options()
         return config
 
     db_name = getenv("DB_NAME") or getenv("POSTGRES_DB") or getenv("AUTH_DB_NAME") or "auth"
@@ -118,12 +125,7 @@ def build_postgres_database_config():
         "PASSWORD": db_password or "",
         "HOST": db_host,
         "PORT": db_port,
-        "OPTIONS": {
-            "options": getenv(
-                "POSTGRES_OPTIONS",
-                f"-c search_path=\"{DB_SCHEMA}\",\"{DB_RUNTIME_SCHEMA}\"",
-            )
-        },
+        "OPTIONS": {"options": postgres_options()},
     }
 
 
