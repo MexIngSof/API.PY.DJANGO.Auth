@@ -79,7 +79,8 @@ def sanitize_email_error(message, email_address=""):
     )
 
 
-def jobcron_password_reset_url(redirect_base_url, raw_url):
+def canonical_password_reset_url(redirect_base_url, raw_url):
+    """Translate Djoser's internal reset path to the public web contract."""
     match = re.match(r"^(?:password-reset|reset-password)/([^/]+)/([^/]+)/?$", raw_url)
     if not match:
         return ""
@@ -88,6 +89,10 @@ def jobcron_password_reset_url(redirect_base_url, raw_url):
         f"{redirect_base_url.rstrip('/')}/reset-password"
         f"?uid={quote(uid)}&token={quote(token)}"
     )
+
+
+# Backward-compatible import for existing JobCron tests and integrations.
+jobcron_password_reset_url = canonical_password_reset_url
 
 
 def provider_name(email_config=None):
@@ -153,14 +158,12 @@ class AuthTransactionalEmailMixin:
         )
         raw_url = str(context.get("url", "")).lstrip("/")
         if email_settings is not None and email_settings.RedirectBaseUrl:
-            jobcron_reset_url = (
-                jobcron_password_reset_url(email_settings.RedirectBaseUrl, raw_url)
+            canonical_reset_url = (
+                canonical_password_reset_url(email_settings.RedirectBaseUrl, raw_url)
                 if self.action_code == ACTION_PASSWORD_RESET
-                and application is not None
-                and application.Code == "JOBCRON"
                 else ""
             )
-            action_url = jobcron_reset_url or f"{email_settings.RedirectBaseUrl.rstrip('/')}/{raw_url}".rstrip("/")
+            action_url = canonical_reset_url or f"{email_settings.RedirectBaseUrl.rstrip('/')}/{raw_url}".rstrip("/")
         else:
             action_url = f"{context.get('protocol')}://{context.get('domain')}/{raw_url}".rstrip("/")
 

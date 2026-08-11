@@ -7,6 +7,7 @@ from django.test import SimpleTestCase
 from auth.custom_email import (
     ACTION_ACTIVATION,
     ActivationEmail,
+    canonical_password_reset_url,
     TEMPLATE_SOURCE_DB_FALLBACK,
     TEMPLATE_SOURCE_DJOSER_FALLBACK,
     TEMPLATE_SOURCE_FILE,
@@ -25,6 +26,17 @@ REFAPART_EMAIL_TEMPLATES = [
 
 
 class RefaPartEmailTemplateTests(SimpleTestCase):
+    def test_refapart_password_reset_url_uses_canonical_web_route(self):
+        action_url = canonical_password_reset_url(
+            "http://localhost:3008",
+            "password-reset/uid-refapart/token-refapart",
+        )
+
+        self.assertEqual(
+            action_url,
+            "http://localhost:3008/reset-password?uid=uid-refapart&token=token-refapart",
+        )
+
     def test_refapart_templates_resolve_and_render(self):
         context = {
             "action_url": "https://refapart.example.test/auth/action",
