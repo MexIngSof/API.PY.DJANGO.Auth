@@ -1,0 +1,19 @@
+name: API Auth PRO image
+
+on:
+  push:
+    branches: [pro]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  image:
+    if: github.ref == 'refs/heads/pro'
+    uses: MexIngSof/Docs/.github/workflows/reusable-api-pro-image.yml@pro
+    with:
+      image_name: api-py-django-auth
+      image_key: API_AUTH_IMAGE
+    secrets: inherit
