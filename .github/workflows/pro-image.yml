@@ -10,10 +10,136 @@ permissions:
   packages: write
 
 jobs:
-  image:
+  verify:
+    runs-on: ubuntu-24.04
+    services:
+      postgres:
+        image: postgres:16.13-alpine
+        env: { POSTGRES_USER: postgres, POSTGRES_PASSWORD: postgres, POSTGRES_DB: postgres }
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres -d postgres"
+          --health-interval 10s --health-timeout 5s --health-retries 10
+    env:
+      DEVELOPMENT_MODE: "False"
+      DJANGO_SECRET_KEY: ci-not-a-production-secret
+      SECRET_KEY: ci-not-a-production-secret
+      POSTGRES_HOST: 127.0.0.1
+      POSTGRES_PORT: "5432"
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+      DB_HOST: 127.0.0.1
+      DB_PORT: "5432"
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      DB_NAME: postgres
+      AUTH_DB_NAME: postgres
+      AUTH_DB_USER: postgres
+      AUTH_DB_PASSWORD: postgres
+      AUTH_DJANGO_SECRET_KEY: ci-secret
+      GATEWAY_DB_NAME: postgres
+      GATEWAY_DB_USER: postgres
+      GATEWAY_DB_PASSWORD: postgres
+      GATEWAY_DJANGO_SECRET_KEY: ci-secret
+      ADDRESS_DB_NAME: postgres
+      ADDRESS_DB_USER: postgres
+      ADDRESS_DB_PASSWORD: postgres
+      ADDRESS_DJANGO_SECRET_KEY: ci-secret
+      AUTOMOTIVE_DB_NAME: postgres
+      AUTOMOTIVE_DB_USER: postgres
+      AUTOMOTIVE_DB_PASSWORD: postgres
+      AUTOMOTIVE_DJANGO_SECRET_KEY: ci-secret
+      CATALOG_DB_NAME: postgres
+      CATALOG_DB_USER: postgres
+      CATALOG_DB_PASSWORD: postgres
+      CATALOG_DJANGO_SECRET_KEY: ci-secret
+      CUSTOMER_DB_NAME: postgres
+      CUSTOMER_DB_USER: postgres
+      CUSTOMER_DB_PASSWORD: postgres
+      CUSTOMER_DJANGO_SECRET_KEY: ci-secret
+      SEARCH_DB_NAME: postgres
+      SEARCH_DB_USER: postgres
+      SEARCH_DB_PASSWORD: postgres
+      SEARCH_DJANGO_SECRET_KEY: ci-secret
+      PRICING_DB_NAME: postgres
+      PRICING_DB_USER: postgres
+      PRICING_DB_PASSWORD: postgres
+      PRICING_DJANGO_SECRET_KEY: ci-secret
+      INVENTORY_DB_NAME: postgres
+      INVENTORY_DB_USER: postgres
+      INVENTORY_DB_PASSWORD: postgres
+      INVENTORY_DJANGO_SECRET_KEY: ci-secret
+      SUPPLIER_DB_NAME: postgres
+      SUPPLIER_DB_USER: postgres
+      SUPPLIER_DB_PASSWORD: postgres
+      SUPPLIER_DJANGO_SECRET_KEY: ci-secret
+      PROCUREMENT_DB_NAME: postgres
+      PROCUREMENT_DB_USER: postgres
+      PROCUREMENT_DB_PASSWORD: postgres
+      PROCUREMENT_DJANGO_SECRET_KEY: ci-secret
+      SALES_DB_NAME: postgres
+      SALES_DB_USER: postgres
+      SALES_DB_PASSWORD: postgres
+      SALES_DJANGO_SECRET_KEY: ci-secret
+      BUSINESS_DISCOVERY_DB_NAME: postgres
+      BUSINESS_DISCOVERY_DB_USER: postgres
+      BUSINESS_DISCOVERY_DB_PASSWORD: postgres
+      BUSINESS_DISCOVERY_DJANGO_SECRET_KEY: ci-secret
+      JOBCRON_DB_NAME: postgres
+      JOBCRON_DB_USER: postgres
+      JOBCRON_DB_PASSWORD: postgres
+      JOBCRON_DJANGO_SECRET_KEY: ci-secret
+      REFAPART_DB_NAME: postgres
+      REFAPART_DB_USER: postgres
+      REFAPART_DB_PASSWORD: postgres
+      REFAPART_DJANGO_SECRET_KEY: ci-secret
+      TECNOTELEC_DB_NAME: postgres
+      TECNOTELEC_DB_USER: postgres
+      TECNOTELEC_DB_PASSWORD: postgres
+      TECNOTELEC_DJANGO_SECRET_KEY: ci-secret
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.10", cache: pip }
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install "uvicorn>=0.23,<1"
+          python -m pip check
+      - name: Django checks and tests
+        run: |
+          python manage.py check
+          python manage.py makemigrations --check --dry-run
+          python manage.py test
+
+  publish:
+    needs: verify
     if: github.ref == 'refs/heads/pro'
-    uses: MexIngSof/Docs/.github/workflows/reusable-api-pro-image.yml@pro
-    with:
-      image_name: api-py-django-auth
-      image_key: API_AUTH_IMAGE
-    secrets: inherit
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build, scan and push
+        env:
+          IMAGE: ghcr.io/mexingsof/api-py-django-auth:pro-${{ github.sha }}
+        run: |
+          set -euo pipefail
+          docker build --pull --file Dockerfile --tag "$IMAGE" .
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 image --exit-code 1 --severity CRITICAL --ignore-unfixed "$IMAGE"
+          docker push "$IMAGE"
+          digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")"
+          [[ "$digest" =~ ^ghcr\.io/mexingsof/[a-z0-9._-]+@sha256:[a-f0-9]{64}$ ]]
+          printf 'IMAGE_KEY=%s\nIMAGE_REF=%s\nSOURCE_REPOSITORY=%s\nSOURCE_SHA=%s\nSOURCE_BRANCH=pro\n' \
+            'API_AUTH_IMAGE' "$digest" "$GITHUB_REPOSITORY" "$GITHUB_SHA" > component.env
+      - uses: actions/upload-artifact@v4
+        with:
+          name: component-image-api-py-django-auth-${{ github.sha }}
+          path: component.env
+          if-no-files-found: error
+          retention-days: 30
