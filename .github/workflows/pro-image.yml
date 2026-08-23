@@ -29,6 +29,9 @@ jobs:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: postgres
+      DATABASE_URL: "postgresql://postgres:postgres@127.0.0.1:5432/postgres"
+      AUTH_EMAIL_PROVIDER: locmem
+      EMAIL_BACKEND: django.core.mail.backends.locmem.EmailBackend
       DB_HOST: 127.0.0.1
       DB_PORT: "5432"
       DB_USER: postgres
