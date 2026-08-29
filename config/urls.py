@@ -28,3 +28,11 @@ urlpatterns = [
     path('api/access/', include('access.urls')),
     path('api/', include('access.urls')),
 ]
+
+# Canonical container readiness endpoint. Keep unauthenticated and side-effect free.
+from django.http import JsonResponse as _RuntimeJsonResponse
+
+def _runtime_health(_request):
+    return _RuntimeJsonResponse({"status": "ok"})
+
+urlpatterns.insert(0, path("health/", _runtime_health))
