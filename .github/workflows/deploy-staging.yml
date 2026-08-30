@@ -86,6 +86,12 @@ jobs:
             printf 'LOG_MAX_FILES=%s\n' "$LOG_MAX_FILES"
             printf 'LOG_MAX_SIZE=%s\n' "$LOG_MAX_SIZE"
           } > "runtime/$SERVICE.env"
+          printf 'ENVIRONMENT=%s\nCORRELATION_HEADER=%s\nLOG_FORMAT=%s\n' "$ENVIRONMENT" "$CORRELATION_HEADER" "$LOG_FORMAT" > runtime/common.env
+          {
+            printf 'POSTGRES_HOST=%s\nDB_HOST=%s\nDB_PORT=%s\n' "$POSTGRES_HOST" "$DB_HOST" "$DB_PORT"
+            printf 'DEVELOPMENT_MODE=%s\nDJANGO_DEBUG=%s\n' "$DEVELOPMENT_MODE" "$DJANGO_DEBUG"
+            printf 'JOBCRON_SCHEDULER_ENABLED=%s\nENABLE_SYSCOM_ETL_WORKER=%s\n' "$JOBCRON_SCHEDULER_ENABLED" "$ENABLE_SYSCOM_ETL_WORKER"
+          } > runtime/api-common.env
           {
             printf 'DB_PASSWORD=%s\nDJANGO_SECRET_KEY=%s\n' "$DB_PASSWORD" "$DJANGO_SECRET_KEY"
             printf 'AUTH_DB_PASSWORD=%s\nAUTH_DJANGO_SECRET_KEY=%s\n' "$DB_PASSWORD" "$DJANGO_SECRET_KEY"
@@ -106,6 +112,13 @@ jobs:
             IdentityFile $HOME/.ssh/api_deploy_key
             UserKnownHostsFile $HOME/.ssh/known_hosts
             StrictHostKeyChecking yes
+            ConnectTimeout 20
+            ConnectionAttempts 3
+            ServerAliveInterval 15
+            ServerAliveCountMax 2
+            ControlMaster auto
+            ControlPersist 120
+            ControlPath ~/.ssh/control-%C
           EOF
           chmod 0600 "$HOME/.ssh/config"; ssh staging-api 'test "$(id -u)" -ne 0'
       - name: Deploy only api-auth with rollback
@@ -113,6 +126,8 @@ jobs:
           set -euo pipefail
           # shellcheck disable=SC2029
           { printf '%s\n' "$STAGING_GHCR_USERNAME"; printf '%s\n' "$STAGING_GHCR_READ_TOKEN"; } | ssh staging-api 'read -r ghcr_user; read -r ghcr_token; printf "%s" "$ghcr_token" | docker login ghcr.io --username "$ghcr_user" --password-stdin >/dev/null'
+          scp runtime/common.env staging-api:/opt/mexingsof/config/common.env.next
+          scp runtime/api-common.env staging-api:/opt/mexingsof/config/api-common.env.next
           scp "runtime/api-auth.env" staging-api:/opt/mexingsof/config/services/api-auth.env.next
           scp "runtime/api-auth.secrets.env" staging-api:/opt/mexingsof/secrets/api-auth.env.next
           printf '%s\n' "$IMAGE_REF" > runtime/api-auth.image-ref
@@ -120,6 +135,7 @@ jobs:
           # shellcheck disable=SC2029
           ssh staging-api 'SERVICE=api-auth IMAGE_KEY=API_AUTH_IMAGE bash -se' <<'REMOTE'
           set -euo pipefail
+          for shared in /opt/mexingsof/config/common.env /opt/mexingsof/config/api-common.env; do mv -f "$shared.next" "$shared"; chmod 0600 "$shared"; done
           runtime_env=/opt/mexingsof/config/services/api-auth.env
           runtime_secret=/opt/mexingsof/secrets/api-auth.env
           restore_runtime() { for file in "$runtime_env" "$runtime_secret"; do if test -f "$file.rollback"; then mv -f "$file.rollback" "$file"; else rm -f "$file"; fi; rm -f "$file.next"; done; }
@@ -128,13 +144,16 @@ jobs:
           for file in "$runtime_env" "$runtime_secret"; do test ! -f "$file" || cp -p "$file" "$file.rollback"; done
           mv -f "$runtime_env.next" "$runtime_env"; mv -f "$runtime_secret.next" "$runtime_secret"; chmod 0600 "$runtime_env" "$runtime_secret"
           trap 'restore_runtime' ERR
-          compose=/opt/mexingsof/stacks/api/compose.pro.yml; test -f "$compose"
-          IMAGE_REF="$(cat /opt/mexingsof/config/services/api-auth.image-ref)"; rm -f /opt/mexingsof/config/services/api-auth.image-ref
+          compose=/opt/mexingsof/stacks/api/compose.pro.yml
+          test -f "$compose"
+          IMAGE_REF="$(cat /opt/mexingsof/config/services/api-auth.image-ref)"
+          rm -f /opt/mexingsof/config/services/api-auth.image-ref
           previous="$(docker inspect --format '{{.Config.Image}}' "${SERVICE}-pro" 2>/dev/null || true)"
-          for key in $(grep -oE '\$\{API_[A-Z0-9_]+_IMAGE' "$compose" | sed 's/^\$\{//' | sort -u); do export "$key=$IMAGE_REF"; done
+          # Non-target values satisfy full-document Compose interpolation only; commands remain scoped to SERVICE.
+          for key in $(grep -oE '\$\{API_[A-Z0-9_]+_IMAGE' "$compose" | cut -c3- | sort -u); do export "$key=$IMAGE_REF"; done
           export "$IMAGE_KEY=$IMAGE_REF"
           docker compose -p mexingsof_api -f "$compose" pull "$SERVICE"
-          docker compose -p mexingsof_api -f "$compose" run --rm --no-deps "$SERVICE" python manage.py migrate --noinput
+          docker compose -p mexingsof_api -f "$compose" run --rm --no-deps "$SERVICE" python manage.py migrate --noinput </dev/null
           docker compose -p mexingsof_api -f "$compose" up -d --no-deps "$SERVICE"
           healthy=0
           for n in $(seq 1 30); do status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${SERVICE}-pro" 2>/dev/null||true)"; if test "$status" = healthy; then healthy=1; break; fi; test "$status" = unhealthy && break; sleep 5; done
