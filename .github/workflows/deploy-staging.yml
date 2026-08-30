@@ -86,6 +86,7 @@ jobs:
             printf 'AWS_SES_RETURN_PATH=%s\n' "$AWS_SES_RETURN_PATH"
             printf 'LOG_MAX_FILES=%s\n' "$LOG_MAX_FILES"
             printf 'LOG_MAX_SIZE=%s\n' "$LOG_MAX_SIZE"
+            printf 'AUTH_EMAIL_DEFERRED_EXTERNAL=%s\n' "$AUTH_EMAIL_DEFERRED_EXTERNAL"
           } > "runtime/$SERVICE.env"
           printf 'ENVIRONMENT=%s\nCORRELATION_HEADER=%s\nLOG_FORMAT=%s\n' "$ENVIRONMENT" "$CORRELATION_HEADER" "$LOG_FORMAT" > runtime/common.env
           {
