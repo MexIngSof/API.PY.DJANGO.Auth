@@ -1,0 +1,154 @@
+name: Deploy Auth API to staging
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id: { description: Successful PRO image run ID, required: true, type: string }
+      confirm: { description: Type DEPLOY_AUTH_STAGING, required: true, type: string }
+permissions: { actions: read, contents: read, packages: read }
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/pro' && inputs.confirm == 'DEPLOY_AUTH_STAGING'
+    runs-on: ubuntu-24.04
+    environment: staging-pro-deploy
+    env:
+      CI_RUN_ID: ${{ inputs.ci_run_id }}
+      SERVICE: api-auth
+      IMAGE_KEY: API_AUTH_IMAGE
+      IMAGE_PATTERN: '^ghcr\.io/mexingsof/api-py-django-auth@sha256:[a-f0-9]{64}$'
+      ARTIFACT_PREFIX: component-image-api-py-django-auth-
+      DB_NAME: ${{ vars.AUTH_DB_NAME }}
+      DB_USER: ${{ vars.AUTH_DB_USER }}
+      DB_PASSWORD: ${{ secrets.AUTH_DB_PASSWORD }}
+      DJANGO_SECRET_KEY: ${{ secrets.AUTH_DJANGO_SECRET_KEY }}
+      ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+      DEVELOPMENT_MODE: ${{ vars.DEVELOPMENT_MODE }}
+      DJANGO_DEBUG: ${{ vars.DJANGO_DEBUG }}
+      DB_HOST: ${{ vars.DB_HOST }}
+      DB_PORT: ${{ vars.DB_PORT }}
+      POSTGRES_HOST: ${{ vars.POSTGRES_HOST }}
+      CORRELATION_HEADER: ${{ vars.CORRELATION_HEADER }}
+      LOG_FORMAT: ${{ vars.LOG_FORMAT }}
+      JOBCRON_SCHEDULER_ENABLED: ${{ vars.JOBCRON_SCHEDULER_ENABLED }}
+      ENABLE_SYSCOM_ETL_WORKER: ${{ vars.ENABLE_SYSCOM_ETL_WORKER }}
+      STAGING_DEPLOY_HOST: ${{ vars.STAGING_DEPLOY_HOST }}
+      STAGING_DEPLOY_PORT: ${{ vars.STAGING_DEPLOY_PORT }}
+      STAGING_DEPLOY_USER: ${{ vars.STAGING_DEPLOY_USER }}
+      STAGING_GHCR_USERNAME: ${{ vars.STAGING_GHCR_USERNAME }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.STAGING_DEPLOY_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+      STAGING_GHCR_READ_TOKEN: ${{ secrets.STAGING_GHCR_READ_TOKEN }}
+      API_CPU_LIMIT: ${{ vars.API_CPU_LIMIT }}
+      API_MEMORY_LIMIT: ${{ vars.API_MEMORY_LIMIT }}
+      AUTH_EMAIL_PROVIDER: ${{ vars.AUTH_EMAIL_PROVIDER }}
+      AWS_SES_FROM_EMAIL: ${{ vars.AWS_SES_FROM_EMAIL }}
+      AWS_SES_REGION: ${{ vars.AWS_SES_REGION }}
+      AWS_SES_RETURN_PATH: ${{ vars.AWS_SES_RETURN_PATH }}
+      LOG_MAX_FILES: ${{ vars.LOG_MAX_FILES }}
+      LOG_MAX_SIZE: ${{ vars.LOG_MAX_SIZE }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require PRO and certified CI artifact
+        env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID")"
+          test "$(jq -r .conclusion <<<"$run_json")" = success
+          test "$(jq -r .head_branch <<<"$run_json")" = pro
+          source_sha="$(jq -r .head_sha <<<"$run_json")"
+          artifacts="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID/artifacts")"
+          artifact_id="$(jq -r --arg p "$ARTIFACT_PREFIX" '.artifacts[]|select(.expired==false and (.name|startswith($p)))|.id' <<<"$artifacts"|head -n1)"
+          test -n "$artifact_id"; mkdir -p evidence/component
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > evidence/component.zip
+          unzip -q evidence/component.zip -d evidence/component
+          grep -Eq "^IMAGE_REF=$IMAGE_PATTERN$" evidence/component/component.env
+          grep -Fxq 'SOURCE_BRANCH=pro' evidence/component/component.env
+          grep -Fxq "SOURCE_SHA=$source_sha" evidence/component/component.env
+          image_ref="$(sed -n 's/^IMAGE_REF=//p' evidence/component/component.env)"
+          printf 'IMAGE_REF=%s\nSOURCE_SHA=%s\n' "$image_ref" "$source_sha" >> "$GITHUB_ENV"
+      - name: Materialize only this API runtime
+        run: |
+          set -euo pipefail; umask 077; mkdir -p runtime
+          {
+            printf 'ENVIRONMENT=%s\nDEVELOPMENT_MODE=%s\nDJANGO_DEBUG=%s\n' "$ENVIRONMENT" "$DEVELOPMENT_MODE" "$DJANGO_DEBUG"
+            printf 'DB_HOST=%s\nDB_PORT=%s\nPOSTGRES_HOST=%s\n' "$DB_HOST" "$DB_PORT" "$POSTGRES_HOST"
+            printf 'DB_NAME=%s\nDB_USER=%s\n' "$DB_NAME" "$DB_USER"
+            printf 'AUTH_DB_NAME=%s\nAUTH_DB_USER=%s\n' "$DB_NAME" "$DB_USER"
+            printf 'CORRELATION_HEADER=%s\nLOG_FORMAT=%s\n' "$CORRELATION_HEADER" "$LOG_FORMAT"
+            printf 'JOBCRON_SCHEDULER_ENABLED=%s\nENABLE_SYSCOM_ETL_WORKER=%s\n' "$JOBCRON_SCHEDULER_ENABLED" "$ENABLE_SYSCOM_ETL_WORKER"
+            printf 'API_CPU_LIMIT=%s\n' "$API_CPU_LIMIT"
+            printf 'API_MEMORY_LIMIT=%s\n' "$API_MEMORY_LIMIT"
+            printf 'AUTH_EMAIL_PROVIDER=%s\n' "$AUTH_EMAIL_PROVIDER"
+            printf 'AWS_SES_FROM_EMAIL=%s\n' "$AWS_SES_FROM_EMAIL"
+            printf 'AWS_SES_REGION=%s\n' "$AWS_SES_REGION"
+            printf 'AWS_SES_RETURN_PATH=%s\n' "$AWS_SES_RETURN_PATH"
+            printf 'LOG_MAX_FILES=%s\n' "$LOG_MAX_FILES"
+            printf 'LOG_MAX_SIZE=%s\n' "$LOG_MAX_SIZE"
+          } > "runtime/$SERVICE.env"
+          {
+            printf 'DB_PASSWORD=%s\nDJANGO_SECRET_KEY=%s\n' "$DB_PASSWORD" "$DJANGO_SECRET_KEY"
+            printf 'AUTH_DB_PASSWORD=%s\nAUTH_DJANGO_SECRET_KEY=%s\n' "$DB_PASSWORD" "$DJANGO_SECRET_KEY"
+            printf 'AWS_ACCESS_KEY_ID=%s\n' "$AWS_ACCESS_KEY_ID"
+            printf 'AWS_SECRET_ACCESS_KEY=%s\n' "$AWS_SECRET_ACCESS_KEY"
+          } > "runtime/$SERVICE.secrets.env"; chmod 0600 runtime/*
+      - name: Configure pinned SSH host
+        run: |
+          set -euo pipefail; install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/api_deploy_key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/api_deploy_key" "$HOME/.ssh/known_hosts"
+          cat > "$HOME/.ssh/config" <<EOF
+          Host staging-api
+            HostName $STAGING_DEPLOY_HOST
+            Port $STAGING_DEPLOY_PORT
+            User $STAGING_DEPLOY_USER
+            IdentityFile $HOME/.ssh/api_deploy_key
+            UserKnownHostsFile $HOME/.ssh/known_hosts
+            StrictHostKeyChecking yes
+          EOF
+          chmod 0600 "$HOME/.ssh/config"; ssh staging-api 'test "$(id -u)" -ne 0'
+      - name: Deploy only api-auth with rollback
+        run: |
+          set -euo pipefail
+          { printf '%s\n' "$STAGING_GHCR_USERNAME"; printf '%s\n' "$STAGING_GHCR_READ_TOKEN"; } | ssh staging-api 'read -r ghcr_user; read -r ghcr_token; printf "%s" "$ghcr_token" | docker login ghcr.io --username "$ghcr_user" --password-stdin >/dev/null'
+          scp "runtime/api-auth.env" staging-api:/opt/mexingsof/config/services/api-auth.env.next
+          scp "runtime/api-auth.secrets.env" staging-api:/opt/mexingsof/secrets/api-auth.env.next
+          printf '%s\n' "$IMAGE_REF" > runtime/api-auth.image-ref
+          scp runtime/api-auth.image-ref staging-api:/opt/mexingsof/config/services/api-auth.image-ref
+          ssh staging-api 'SERVICE=api-auth IMAGE_KEY=API_AUTH_IMAGE bash -se' <<'REMOTE'
+          set -euo pipefail
+          runtime_env=/opt/mexingsof/config/services/api-auth.env
+          runtime_secret=/opt/mexingsof/secrets/api-auth.env
+          restore_runtime() { for file in "$runtime_env" "$runtime_secret"; do if test -f "$file.rollback"; then mv -f "$file.rollback" "$file"; else rm -f "$file"; fi; rm -f "$file.next"; done; }
+          cleanup_runtime() { rm -f "$runtime_env.rollback" "$runtime_secret.rollback" "$runtime_env.next" "$runtime_secret.next"; }
+          test -f "$runtime_env.next"; test -f "$runtime_secret.next"
+          for file in "$runtime_env" "$runtime_secret"; do test ! -f "$file" || cp -p "$file" "$file.rollback"; done
+          mv -f "$runtime_env.next" "$runtime_env"; mv -f "$runtime_secret.next" "$runtime_secret"; chmod 0600 "$runtime_env" "$runtime_secret"
+          trap 'restore_runtime' ERR
+          compose=/opt/mexingsof/stacks/api/compose.pro.yml; test -f "$compose"
+          IMAGE_REF="$(cat /opt/mexingsof/config/services/api-auth.image-ref)"; rm -f /opt/mexingsof/config/services/api-auth.image-ref
+          previous="$(docker inspect --format '{{.Config.Image}}' "${SERVICE}-pro" 2>/dev/null || true)"
+          export "$IMAGE_KEY=$IMAGE_REF"
+          docker compose -p mexingsof_api -f "$compose" pull "$SERVICE"
+          docker compose -p mexingsof_api -f "$compose" run --rm --no-deps "$SERVICE" python manage.py migrate --noinput
+          docker compose -p mexingsof_api -f "$compose" up -d --no-deps "$SERVICE"
+          healthy=0
+          for n in $(seq 1 30); do status="$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "${SERVICE}-pro" 2>/dev/null||true)"; if test "$status" = healthy; then healthy=1; break; fi; test "$status" = unhealthy && break; sleep 5; done
+          if test "$healthy" = 1; then cleanup_runtime; trap - ERR; exit 0; fi
+          restore_runtime; trap - ERR
+          if test -n "$previous"; then export "$IMAGE_KEY=$previous"; docker compose -p mexingsof_api -f "$compose" up -d --no-deps "$SERVICE"; fi
+          echo "Health failed; runtime and image rollback attempted for $SERVICE" >&2; exit 1
+          REMOTE
+      - name: Collect redacted evidence
+        if: always()
+        run: |
+          mkdir -p evidence
+          printf 'SERVICE=%s\nSOURCE_SHA=%s\nIMAGE_REF=%s\nDEPLOYMENT_RUN_ID=%s\n' "$SERVICE" "${SOURCE_SHA:-unknown}" "${IMAGE_REF:-unknown}" "$GITHUB_RUN_ID" > evidence/deployment.env
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: staging-deploy-api-auth-${{ github.run_id }}
+          path: evidence
+          if-no-files-found: error
+          retention-days: 30
