@@ -62,7 +62,7 @@ jobs:
           test -n "$artifact_id"; mkdir -p evidence/component
           gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > evidence/component.zip
           unzip -q evidence/component.zip -d evidence/component
-          grep -Eq "^IMAGE_REF=$IMAGE_PATTERN$" evidence/component/component.env
+          grep -Eq "^IMAGE_REF=${IMAGE_PATTERN#^}" evidence/component/component.env
           grep -Fxq 'SOURCE_BRANCH=pro' evidence/component/component.env
           grep -Fxq "SOURCE_SHA=$source_sha" evidence/component/component.env
           image_ref="$(sed -n 's/^IMAGE_REF=//p' evidence/component/component.env)"
