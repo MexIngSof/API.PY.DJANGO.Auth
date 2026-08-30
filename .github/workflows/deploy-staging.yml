@@ -131,6 +131,7 @@ jobs:
           compose=/opt/mexingsof/stacks/api/compose.pro.yml; test -f "$compose"
           IMAGE_REF="$(cat /opt/mexingsof/config/services/api-auth.image-ref)"; rm -f /opt/mexingsof/config/services/api-auth.image-ref
           previous="$(docker inspect --format '{{.Config.Image}}' "${SERVICE}-pro" 2>/dev/null || true)"
+          for key in $(grep -oE '\$\{API_[A-Z0-9_]+_IMAGE' "$compose" | sed 's/^\$\{//' | sort -u); do export "$key=$IMAGE_REF"; done
           export "$IMAGE_KEY=$IMAGE_REF"
           docker compose -p mexingsof_api -f "$compose" pull "$SERVICE"
           docker compose -p mexingsof_api -f "$compose" run --rm --no-deps "$SERVICE" python manage.py migrate --noinput
