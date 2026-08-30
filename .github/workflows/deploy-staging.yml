@@ -35,7 +35,7 @@ jobs:
       STAGING_DEPLOY_USER: ${{ vars.STAGING_DEPLOY_USER }}
       STAGING_GHCR_USERNAME: ${{ vars.STAGING_GHCR_USERNAME }}
       DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.STAGING_DEPLOY_SSH_PRIVATE_KEY }}
-      SSH_KNOWN_HOSTS: ${{ secrets.STAGING_SSH_KNOWN_HOSTS }}
+      SSH_KNOWN_HOSTS: ${{ vars.STAGING_SSH_KNOWN_HOSTS }}
       STAGING_GHCR_READ_TOKEN: ${{ secrets.STAGING_GHCR_READ_TOKEN }}
       API_CPU_LIMIT: ${{ vars.API_CPU_LIMIT }}
       API_MEMORY_LIMIT: ${{ vars.API_MEMORY_LIMIT }}
@@ -111,11 +111,13 @@ jobs:
       - name: Deploy only api-auth with rollback
         run: |
           set -euo pipefail
+          # shellcheck disable=SC2029
           { printf '%s\n' "$STAGING_GHCR_USERNAME"; printf '%s\n' "$STAGING_GHCR_READ_TOKEN"; } | ssh staging-api 'read -r ghcr_user; read -r ghcr_token; printf "%s" "$ghcr_token" | docker login ghcr.io --username "$ghcr_user" --password-stdin >/dev/null'
           scp "runtime/api-auth.env" staging-api:/opt/mexingsof/config/services/api-auth.env.next
           scp "runtime/api-auth.secrets.env" staging-api:/opt/mexingsof/secrets/api-auth.env.next
           printf '%s\n' "$IMAGE_REF" > runtime/api-auth.image-ref
           scp runtime/api-auth.image-ref staging-api:/opt/mexingsof/config/services/api-auth.image-ref
+          # shellcheck disable=SC2029
           ssh staging-api 'SERVICE=api-auth IMAGE_KEY=API_AUTH_IMAGE bash -se' <<'REMOTE'
           set -euo pipefail
           runtime_env=/opt/mexingsof/config/services/api-auth.env
