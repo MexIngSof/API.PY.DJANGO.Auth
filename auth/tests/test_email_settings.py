@@ -41,3 +41,14 @@ class ProjectEmailSettingsTests(SimpleTestCase):
         with patch.dict("os.environ", {"AUTH_EMAIL_PROVIDER": "ses"}, clear=True):
             with self.assertRaises(ImproperlyConfigured):
                 get_email_settings("AUTH", development_mode=False)
+
+    def test_production_allows_explicit_deferred_external_resolution(self):
+        with patch.dict("os.environ", {"AUTH_EMAIL_PROVIDER": "ses"}, clear=True):
+            settings = get_email_settings(
+                "AUTH",
+                development_mode=False,
+                allow_deferred_external=True,
+            )
+
+        self.assertEqual(settings.provider, "ses")
+        self.assertFalse(settings.is_complete)

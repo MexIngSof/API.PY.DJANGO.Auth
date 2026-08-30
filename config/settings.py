@@ -134,7 +134,12 @@ DATABASES = {
     "default": build_postgres_database_config()
 }
 
-AUTH_EMAIL_SETTINGS = get_email_settings("AUTH", development_mode=DEVELOPMENT_MODE)
+AUTH_EMAIL_DEFERRED_EXTERNAL = getenv('AUTH_EMAIL_DEFERRED_EXTERNAL', 'false').lower() == 'true'
+AUTH_EMAIL_SETTINGS = get_email_settings(
+    "AUTH",
+    development_mode=DEVELOPMENT_MODE,
+    allow_deferred_external=AUTH_EMAIL_DEFERRED_EXTERNAL,
+)
 AUTH_NOTIFICATION_FROM_EMAIL = AUTH_EMAIL_SETTINGS.from_email
 DEFAULT_FROM_EMAIL = AUTH_NOTIFICATION_FROM_EMAIL
 SERVER_EMAIL = AUTH_NOTIFICATION_FROM_EMAIL
@@ -158,6 +163,8 @@ EMAIL_BACKEND = getenv('EMAIL_BACKEND')
 if not EMAIL_BACKEND:
     if AUTH_EMAIL_SETTINGS.provider == "ses" and AUTH_EMAIL_SETTINGS.is_complete:
         EMAIL_BACKEND = 'django_ses.SESBackend'
+    elif AUTH_EMAIL_DEFERRED_EXTERNAL:
+        EMAIL_BACKEND = 'auth.email_backends.DeferredExternalEmailBackend'
     else:
         EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 

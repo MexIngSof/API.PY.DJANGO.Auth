@@ -64,7 +64,12 @@ def _project_value(project_code: str, key: str) -> tuple[str, str]:
     return "", project_name
 
 
-def get_email_settings(project_code: str = "AUTH", *, development_mode: bool = True) -> ProjectEmailSettings:
+def get_email_settings(
+    project_code: str = "AUTH",
+    *,
+    development_mode: bool = True,
+    allow_deferred_external: bool = False,
+) -> ProjectEmailSettings:
     """
     Resolve email settings for a project.
 
@@ -118,7 +123,11 @@ def get_email_settings(project_code: str = "AUTH", *, development_mode: bool = T
         )
     )
 
-    if not development_mode and (not provider or provider.lower() == "console" or not is_complete):
+    if (
+        not development_mode
+        and not allow_deferred_external
+        and (not provider or provider.lower() == "console" or not is_complete)
+    ):
         missing = []
         if provider.lower() == "console":
             missing.append(f"{normalized_project_code}_EMAIL_PROVIDER")

@@ -47,6 +47,7 @@ jobs:
       LOG_MAX_SIZE: ${{ vars.LOG_MAX_SIZE }}
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AUTH_EMAIL_DEFERRED_EXTERNAL: 'true'
     steps:
       - uses: actions/checkout@v4
       - name: Require PRO and certified CI artifact
@@ -95,6 +96,7 @@ jobs:
           {
             printf 'DB_PASSWORD=%s\nDJANGO_SECRET_KEY=%s\n' "$DB_PASSWORD" "$DJANGO_SECRET_KEY"
             printf 'AUTH_DB_PASSWORD=%s\nAUTH_DJANGO_SECRET_KEY=%s\n' "$DB_PASSWORD" "$DJANGO_SECRET_KEY"
+
             printf 'AWS_ACCESS_KEY_ID=%s\n' "$AWS_ACCESS_KEY_ID"
             printf 'AWS_SECRET_ACCESS_KEY=%s\n' "$AWS_SECRET_ACCESS_KEY"
           } > "runtime/$SERVICE.secrets.env"; chmod 0600 runtime/*
