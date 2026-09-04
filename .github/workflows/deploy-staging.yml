@@ -138,15 +138,28 @@ jobs:
           # shellcheck disable=SC2029
           ssh staging-api 'SERVICE=api-auth IMAGE_KEY=API_AUTH_IMAGE bash -se' <<'REMOTE'
           set -euo pipefail
-          for shared in /opt/mexingsof/config/common.env /opt/mexingsof/config/api-common.env; do mv -f "$shared.next" "$shared"; chmod 0600 "$shared"; done
+          shared_common=/opt/mexingsof/config/common.env
+          shared_api=/opt/mexingsof/config/api-common.env
           runtime_env=/opt/mexingsof/config/services/api-auth.env
           runtime_secret=/opt/mexingsof/secrets/api-auth.env
-          restore_runtime() { for file in "$runtime_env" "$runtime_secret"; do if test -f "$file.rollback"; then mv -f "$file.rollback" "$file"; else rm -f "$file"; fi; rm -f "$file.next"; done; }
-          cleanup_runtime() { rm -f "$runtime_env.rollback" "$runtime_secret.rollback" "$runtime_env.next" "$runtime_secret.next"; }
-          test -f "$runtime_env.next"; test -f "$runtime_secret.next"
-          for file in "$runtime_env" "$runtime_secret"; do test ! -f "$file" || cp -p "$file" "$file.rollback"; done
-          mv -f "$runtime_env.next" "$runtime_env"; mv -f "$runtime_secret.next" "$runtime_secret"; chmod 0600 "$runtime_env" "$runtime_secret"
+          restore_runtime() {
+            for file in "$shared_common" "$shared_api" "$runtime_env" "$runtime_secret"; do
+              if test -f "$file.rollback"; then mv -f "$file.rollback" "$file"; else rm -f "$file"; fi
+              rm -f "$file.next"
+            done
+          }
+          cleanup_runtime() {
+            rm -f "$shared_common.rollback" "$shared_api.rollback" "$runtime_env.rollback" "$runtime_secret.rollback"
+            rm -f "$shared_common.next" "$shared_api.next" "$runtime_env.next" "$runtime_secret.next"
+          }
+          for file in "$shared_common" "$shared_api" "$runtime_env" "$runtime_secret"; do
+            test -f "$file.next"
+            test ! -f "$file" || cp -p "$file" "$file.rollback"
+          done
           trap 'restore_runtime' ERR
+          mv -f "$shared_common.next" "$shared_common"; chmod 0600 "$shared_common"
+          mv -f "$shared_api.next" "$shared_api"; chmod 0600 "$shared_api"
+          mv -f "$runtime_env.next" "$runtime_env"; mv -f "$runtime_secret.next" "$runtime_secret"; chmod 0600 "$runtime_env" "$runtime_secret"
           compose=/opt/mexingsof/stacks/api/compose.pro.yml
           test -f "$compose"
           IMAGE_REF="$(cat /opt/mexingsof/config/services/api-auth.image-ref)"
@@ -163,7 +176,7 @@ jobs:
           if test "$healthy" = 1; then cleanup_runtime; trap - ERR; exit 0; fi
           restore_runtime; trap - ERR
           if test -n "$previous"; then export "$IMAGE_KEY=$previous"; docker compose -p mexingsof_api -f "$compose" up -d --no-deps "$SERVICE"; fi
-          echo "Health failed; runtime and image rollback attempted for $SERVICE" >&2; exit 1
+          echo "Health failed; shared runtime, service runtime and image rollback attempted for $SERVICE" >&2; exit 1
           REMOTE
       - name: Collect redacted evidence
         if: always()
