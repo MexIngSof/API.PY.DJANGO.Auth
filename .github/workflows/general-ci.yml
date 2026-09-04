@@ -1,0 +1,51 @@
+name: API general CI
+
+on:
+  push:
+    branches: [general]
+  pull_request:
+    branches: [general, dev, pro]
+
+permissions:
+  contents: read
+
+jobs:
+  validate-general:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Validate workflow YAML and embedded Bash
+        run: |
+          set -euo pipefail
+          python -m pip install --disable-pip-version-check --quiet pyyaml
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess, yaml
+          for path in sorted(Path('.github/workflows').glob('*.y*ml')):
+              data = yaml.safe_load(path.read_text())
+              if not isinstance(data, dict):
+                  raise SystemExit(f'invalid workflow document: {path}')
+              for job in (data.get('jobs') or {}).values():
+                  for step in job.get('steps') or []:
+                      script = step.get('run')
+                      shell = str(step.get('shell') or 'bash')
+                      if script and ('bash' in shell or step.get('shell') is None):
+                          subprocess.run(['bash', '-n'], input=script, text=True, check=True)
+          PY
+      - name: Validate Python syntax
+        run: python -m compileall -q . -x '(^|/)(\.git|\.venv|venv|node_modules)/'
+      - name: Validate deployment ownership invariants
+        run: |
+          set -euo pipefail
+          f=.github/workflows/deploy-staging.yml
+          grep -Fq "github.ref == 'refs/heads/pro'" "$f"
+          grep -Fq -- '--no-deps' "$f"
+          grep -Fq 'sha256:' "$f"
+          grep -Fq 'trap' "$f"
+          grep -Fq '.rollback' "$f"
+          grep -Fq 'shared_common=' "$f"
+          grep -Fq 'shared_api=' "$f"
+          ! grep -Eq '(^|:)latest([[:space:]]|$)' "$f"
