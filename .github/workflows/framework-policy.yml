@@ -1,0 +1,67 @@
+name: Repository framework policy
+
+on:
+  push:
+    branches: [general, dev, pro]
+    paths:
+      - service-metadata.yml
+      - .github/workflows/framework-policy.yml
+      - .github/workflows/deploy-staging.yml
+  pull_request:
+    branches: [general, dev, pro, main]
+
+permissions:
+  contents: read
+
+jobs:
+  policy:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate repository framework contract
+        run: |
+          set -euo pipefail
+          f=service-metadata.yml
+          test -f "$f"
+          grep -Fxq 'schema_version: 1' "$f"
+          grep -Fxq 'framework_policy_version: "2026.09.1"' "$f"
+          grep -Fxq '  deployment_owner: self' "$f"
+          grep -Fxq '  ownership: SERVICE_ONLY' "$f"
+          grep -Fxq '  network: mexingsof_pro' "$f"
+          grep -Fxq '  deploy_authority_branch: pro' "$f"
+          grep -Fxq '  stable_branch: main' "$f"
+          grep -Fxq '  image_policy: immutable_digest' "$f"
+          grep -Fxq '  rollback_required: true' "$f"
+          grep -Fxq '  compatibility_gate: required' "$f"
+          grep -Fxq '  correlation_header: X-Request-ID' "$f"
+          grep -Fxq '  log_format: json' "$f"
+          repo="$(sed -n 's/^  repository: //p' "$f")"
+          test "$repo" = "$GITHUB_REPOSITORY"
+          kind="$(sed -n 's/^  kind: //p' "$f")"
+          case "$kind" in
+            api)
+              grep -Fxq '  stack: mexingsof_api' "$f"
+              grep -Fxq '  internal_port: 8000' "$f"
+              grep -Fxq '  health_path: /health/' "$f"
+              grep -Fq '  environment_file: /opt/mexingsof/config/services/api-' "$f"
+              grep -Fq '  secrets_file: /opt/mexingsof/secrets/api-' "$f"
+              ;;
+            web)
+              grep -Fxq '  stack: mexingsof_web' "$f"
+              grep -Fxq '  internal_port: 3000' "$f"
+              grep -Fxq '  health_path: /health' "$f"
+              grep -Fq '  environment_file: /opt/mexingsof/config/services/web-' "$f"
+              grep -Fxq '  gateway_internal_base_url: http://api-gateway:8000/api/v1' "$f"
+              ;;
+            *) echo "unsupported component kind: $kind" >&2; exit 1 ;;
+          esac
+          d=.github/workflows/deploy-staging.yml
+          test -f "$d"
+          grep -Fq "github.ref == 'refs/heads/pro'" "$d"
+          grep -Fq -- '--no-deps' "$d"
+          grep -Fq 'RuntimeOwnership=SERVICE_ONLY' "$d"
+          ! grep -Fq '/opt/mexingsof/config/common.env' "$d"
+          ! grep -Fq '/opt/mexingsof/config/api-common.env' "$d"
+          ! grep -Fq '/opt/mexingsof/config/web-common.env' "$d"
+          ! grep -Eq '(^|:)latest([[:space:]]|$)' "$d"
+          echo 'FRAMEWORK_POLICY=PASS'
