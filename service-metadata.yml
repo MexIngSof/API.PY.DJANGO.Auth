@@ -1,0 +1,30 @@
+schema_version: 1
+framework_policy_version: "2026.09.1"
+component:
+  code: auth
+  kind: api
+  repository: MexIngSof/API.PY.DJANGO.Auth
+  compose_owner: MexIngSof/Docker.API.PY
+  deployment_owner: self
+runtime:
+  ownership: SERVICE_ONLY
+  stack: mexingsof_api
+  network: mexingsof_pro
+  internal_port: 8000
+  health_path: /health/
+  environment_file: /opt/mexingsof/config/services/api-auth.env
+  secrets_file: /opt/mexingsof/secrets/api-auth.env
+database:
+  owner: self
+  logical_name_variable: AUTH_DB_NAME
+delivery:
+  persistent_branches: [general, dev, pro, main]
+  deploy_authority_branch: pro
+  stable_branch: main
+  image_policy: immutable_digest
+  rollback_required: true
+contracts:
+  compatibility_gate: required
+  correlation_header: X-Request-ID
+observability:
+  log_format: json
