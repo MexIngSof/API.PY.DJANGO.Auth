@@ -71,4 +71,8 @@ jobs:
         run: mkdir -p evidence; printf 'SERVICE=%s\nSOURCE_SHA=%s\nIMAGE_REF=%s\nRuntimeOwnership=SERVICE_ONLY\nEmailProviderPreserved=true\n' "$SERVICE" "${SOURCE_SHA:-unknown}" "${IMAGE_REF:-unknown}" > evidence/deployment.env
       - uses: actions/upload-artifact@v4
         if: always()
-        with: { name: staging-deploy-api-auth-${{ github.run_id }}, path: evidence, if-no-files-found: error, retention-days: 30 }
+        with:
+          name: staging-deploy-api-auth-${{ github.run_id }}
+          path: evidence
+          if-no-files-found: error
+          retention-days: 30
