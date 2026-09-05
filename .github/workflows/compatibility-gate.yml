@@ -1,0 +1,107 @@
+name: API compatibility gate
+
+on:
+  push:
+    branches: [general, dev, pro]
+    paths:
+      - "contracts/transversal-api.yml"
+      - "**/*.py"
+      - ".github/workflows/compatibility-gate.yml"
+  pull_request:
+    paths:
+      - "contracts/transversal-api.yml"
+      - "**/*.py"
+      - ".github/workflows/compatibility-gate.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compatibility:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+
+      - name: Validate transversal contract manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          contract="contracts/transversal-api.yml"
+          test -f "$contract"
+          required=(
+            "schema_version: 1"
+            "contract: transversal_http"
+            "responsibility:"
+            "health: /health/"
+            "request_id_header: X-Request-ID"
+            "correlation_id_header: X-Correlation-ID"
+            "health_success: HTTP_2XX"
+            "errors: NON_2XX_ON_UNHEALTHY_OR_UNAVAILABLE"
+            "permissions: PLATFORM_PROBE_NO_END_USER_AUTH"
+            "models: NONE"
+            "migrations: NONE"
+            "healthcheck: /health/"
+            "tests: compatibility-gate AND general-ci"
+            "gateway_route: DIRECT_PLATFORM_PROBE_ONLY; BUSINESS_TRAFFIC_GATEWAY_ONLY"
+            "frontend_consumption: FORBIDDEN_FOR_HEALTH_ENDPOINT"
+            "compatibility: BACKWARD_COMPATIBLE_HEADERS_AND_HEALTH_PATH_REQUIRED"
+          )
+          for token in "${required[@]}"; do
+            grep -Fq "$token" "$contract" || { echo "Missing contract token: $token"; exit 1; }
+          done
+
+      - name: Validate executable HTTP compatibility surface
+        shell: python
+        run: |
+          from pathlib import Path
+          import sys
+
+          ignored = {".git", ".venv", "venv", "node_modules", "__pycache__"}
+          files = []
+          for path in Path(".").rglob("*.py"):
+              if any(part in ignored for part in path.parts):
+                  continue
+              try:
+                  files.append((path, path.read_text(encoding="utf-8")))
+              except UnicodeDecodeError:
+                  pass
+
+          combined = "\n".join(text.lower() for _, text in files)
+          if "x-request-id" not in combined or "x-correlation-id" not in combined:
+              print("Canonical request/correlation headers are not configured in Python code", file=sys.stderr)
+              sys.exit(1)
+
+          context = []
+          response = []
+          logging = []
+          health = []
+          for path, text in files:
+              low = text.lower()
+              path_low = str(path).lower()
+              has_ids = "request_id" in low and "correlation_id" in low
+              if has_ids and ("middleware" in path_low or "middleware" in low):
+                  context.append(str(path))
+                  if "http.response.start" in low or "response_headers" in low or "response[" in low:
+                      response.append(str(path))
+              if has_ids and ("json.dumps" in low or "jsonformatter" in low or "structured" in low):
+                  logging.append(str(path))
+              if "/health/" in low or '"health/"' in low or "'health/'" in low:
+                  health.append(str(path))
+
+          checks = {
+              "request/correlation middleware": context,
+              "response propagation": response,
+              "structured request logging": logging,
+              "canonical health surface": health,
+          }
+          failed = False
+          for label, matches in checks.items():
+              if not matches:
+                  print(f"Missing {label}", file=sys.stderr)
+                  failed = True
+              else:
+                  print(f"{label}: {', '.join(matches[:5])}")
+          if failed:
+              sys.exit(1)
+          print("PASS: transversal API compatibility contract is executable")
