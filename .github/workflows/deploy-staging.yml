@@ -37,14 +37,14 @@ jobs:
       SSH_KNOWN_HOSTS: ${{ vars.STAGING_SSH_KNOWN_HOSTS }}
       STAGING_GHCR_READ_TOKEN: ${{ secrets.STAGING_GHCR_READ_TOKEN }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
       - name: Resolve certified image
         env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           set -euo pipefail
           r="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID")"; test "$(jq -r .conclusion <<<"$r")" = success; test "$(jq -r .head_branch <<<"$r")" = pro; s="$(jq -r .head_sha <<<"$r")"; test "$s" = "$GITHUB_SHA"
           a="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID/artifacts")"; ids="$(jq -r --arg p "$ARTIFACT_PREFIX" '.artifacts[]?|select(.expired==false and (.name|startswith($p)))|.id' <<<"$a")"; test "$(grep -c . <<<"$ids")" -eq 1; gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ids/zip" > a.zip; mkdir -p evidence/component; unzip -q a.zip -d evidence/component
-          ref="$(sed -n 's/^IMAGE_REF=//p' evidence/component/component.env)"; [[ "$ref" =~ $IMAGE_PATTERN ]]; grep -Fxq "SOURCE_SHA=$s" evidence/component/component.env; grep -Fxq 'SOURCE_BRANCH=pro' evidence/component/component.env; printf 'IMAGE_REF=%s\nSOURCE_SHA=%s\n' "$ref" "$s" >> "$GITHUB_ENV"
+          ref="$(sed -n 's/^IMAGE_REF=//p' evidence/component/component.env)"; [[ "$ref" =~ $IMAGE_PATTERN ]]; grep -Fxq "SOURCE_SHA=$s" evidence/component/component.env; grep -Fxq 'SOURCE_BRANCH=pro' evidence/component/component.env; test -s evidence/component/sbom.cdx.json; printf 'IMAGE_REF=%s\nSOURCE_SHA=%s\n' "$ref" "$s" >> "$GITHUB_ENV"
       - name: Materialize Auth-owned runtime
         run: |
           set -euo pipefail; umask 077; mkdir -p runtime
@@ -62,14 +62,18 @@ jobs:
           set -euo pipefail; c=/opt/mexingsof/stacks/api/compose.pro.yml; e="/opt/mexingsof/config/services/$SERVICE.env"; q="/opt/mexingsof/secrets/$SERVICE.env"; test -f "$c"; b="/opt/mexingsof/.deploy-backups/${SERVICE}-$(date +%s)-$$"; install -d -m 0700 "$b"; export DOCKER_CONFIG="/tmp/mexingsof-docker-$SERVICE"
           save(){ test -f "$1" && cp -p "$1" "$b/$2" || : > "$b/$2.absent"; }; restore(){ test -f "$b/$2.absent" && rm -f "$1" || cp -p "$b/$2" "$1"; }; prev="$(docker inspect -f '{{.Config.Image}}' "$SERVICE-pro" 2>/dev/null||true)"
           rollback(){ rc=$?; trap - ERR; set +e; restore "$e" env; restore "$q" secret; if test -n "$prev"; then for k in $(grep -oE '\$\{API_[A-Z0-9_]+_IMAGE' "$c"|cut -c3-|sort -u); do export "$k=$prev"; done; export "$IMAGE_KEY=$prev"; docker compose -p mexingsof_api -f "$c" up -d --no-deps --force-recreate "$SERVICE"; else docker compose -p mexingsof_api -f "$c" rm -sf "$SERVICE"||true; fi; rm -rf "$b" "$DOCKER_CONFIG"; exit "$rc"; }; trap rollback ERR
+          services='api-address api-auth api-automotive api-business-discovery api-catalog api-customer api-gateway api-inventory api-jobcron api-pricing api-procurement api-refapart api-sales api-search api-supplier api-tecnotelec'
+          before="$(for s in $services; do test "$s" = "$SERVICE" || printf '%s=%s\n' "$s" "$(docker inspect -f '{{.Id}}' "$s-pro" 2>/dev/null||true)"; done)"
           save "$e" env; save "$q" secret; mv -f "$e.next" "$e"; mv -f "$q.next" "$q"; chmod 0600 "$e" "$q"; grep -Fq 'AUTH_EMAIL_DEFERRED_EXTERNAL=true' "$e"
           ref="$(cat "/opt/mexingsof/config/services/$SERVICE.image-ref")"; rm -f "/opt/mexingsof/config/services/$SERVICE.image-ref"; for k in $(grep -oE '\$\{API_[A-Z0-9_]+_IMAGE' "$c"|cut -c3-|sort -u); do export "$k=$ref"; done; export "$IMAGE_KEY=$ref"
-          docker compose -p mexingsof_api -f "$c" pull "$SERVICE"; docker compose -p mexingsof_api -f "$c" run --rm --no-deps "$SERVICE" python manage.py migrate --noinput </dev/null; docker compose -p mexingsof_api -f "$c" up -d --no-deps "$SERVICE"; st=unknown; for n in $(seq 1 30); do st="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$SERVICE-pro")"; test "$st" = healthy && break; test "$st" = unhealthy && false; sleep 5; done; test "$st" = healthy; test "$(docker inspect -f '{{.Image}}' "$SERVICE-pro")" = "$(docker image inspect "$ref" -f '{{.Id}}')"; trap - ERR; rm -rf "$b" "$DOCKER_CONFIG"
+          docker compose -p mexingsof_api -f "$c" pull "$SERVICE"; docker compose -p mexingsof_api -f "$c" run --rm --no-deps "$SERVICE" python manage.py migrate --noinput </dev/null; docker compose -p mexingsof_api -f "$c" up -d --no-deps "$SERVICE"; st=unknown; for n in $(seq 1 30); do st="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$SERVICE-pro")"; test "$st" = healthy && break; test "$st" = unhealthy && false; sleep 5; done; test "$st" = healthy; test "$(docker inspect -f '{{.Image}}' "$SERVICE-pro")" = "$(docker image inspect "$ref" -f '{{.Id}}')"
+          after="$(for s in $services; do test "$s" = "$SERVICE" || printf '%s=%s\n' "$s" "$(docker inspect -f '{{.Id}}' "$s-pro" 2>/dev/null||true)"; done)"; test "$before" = "$after"
+          trap - ERR; rm -rf "$b" "$DOCKER_CONFIG"
           REMOTE
       - name: Evidence
         if: always()
-        run: mkdir -p evidence; printf 'SERVICE=%s\nSOURCE_SHA=%s\nIMAGE_REF=%s\nRuntimeOwnership=SERVICE_ONLY\nEmailProviderPreserved=true\n' "$SERVICE" "${SOURCE_SHA:-unknown}" "${IMAGE_REF:-unknown}" > evidence/deployment.env
-      - uses: actions/upload-artifact@v4
+        run: mkdir -p evidence; printf 'SERVICE=%s\nSOURCE_SHA=%s\nIMAGE_REF=%s\nRuntimeOwnership=SERVICE_ONLY\nSiblingIsolation=PASS\nSBOMRequired=true\nEmailProviderPreserved=true\n' "$SERVICE" "${SOURCE_SHA:-unknown}" "${IMAGE_REF:-unknown}" > evidence/deployment.env
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         if: always()
         with:
           name: staging-deploy-api-auth-${{ github.run_id }}
