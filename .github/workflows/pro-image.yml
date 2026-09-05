@@ -2,7 +2,7 @@ name: API Auth PRO image
 
 on:
   push:
-    branches: [pro]
+    branches: [dev, pro]
   workflow_dispatch:
 
 permissions:
