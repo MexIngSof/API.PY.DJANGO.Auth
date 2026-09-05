@@ -8,10 +8,9 @@ on:
       - .github/CODEOWNERS
       - .github/PULL_REQUEST_TEMPLATE.md
       - .github/dependabot.yml
-      - .github/workflows/general-ci.yml
-      - .github/workflows/pro-image.yml
-      - .github/workflows/framework-policy.yml
-      - .github/workflows/deploy-staging.yml
+      - .github/workflows/**
+      - Dockerfile
+      - requirements*.txt
   pull_request:
     branches: [general, dev, pro, main]
 
@@ -22,7 +21,7 @@ jobs:
   policy:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - name: Validate repository framework contract
         run: |
           set -euo pipefail
@@ -73,6 +72,10 @@ jobs:
           grep -Fq 'before=' "$d"
           grep -Fq 'after=' "$d"
           grep -Fq 'rollback()' "$d"
+          grep -Eq '(previous|prev)=' "$d"
+          grep -Eq '(backup_dir|b)=' "$d"
+          grep -Fq 'healthy' "$d"
+          grep -Fq 'SBOMRequired=true' "$d"
           ! grep -Fq '/opt/mexingsof/config/common.env' "$d"
           ! grep -Fq '/opt/mexingsof/config/api-common.env' "$d"
           ! grep -Fq '/opt/mexingsof/config/web-common.env' "$d"
@@ -81,7 +84,20 @@ jobs:
           grep -Fq "if: github.ref == 'refs/heads/pro'" "$p"
           grep -Fq 'sbom.cdx.json' "$p"
           grep -Fq 'SBOM=sbom.cdx.json' "$p"
-          if grep -REn 'uses:[[:space:]]+[^@[:space:]]+@v[0-9]+' .github/workflows; then
-            echo 'Mutable GitHub Action reference found.' >&2; exit 1
-          fi
+          ! grep -Eq '(^|:)latest([[:space:]]|$)' "$p"
+          python - <<'PY'
+          from pathlib import Path
+          import re, yaml
+          pin=re.compile(r'^[^@\s]+@[0-9a-f]{40}$')
+          def walk(x,path):
+              if isinstance(x,dict):
+                  for k,v in x.items():
+                      if k=='uses' and isinstance(v,str) and not v.startswith('./') and not pin.fullmatch(v):
+                          raise SystemExit(f'unpinned action in {path}: {v}')
+                      walk(v,path)
+              elif isinstance(x,list):
+                  for v in x: walk(v,path)
+          for path in sorted(Path('.github/workflows').glob('*.y*ml')):
+              walk(yaml.safe_load(path.read_text()),path)
+          PY
           echo 'FRAMEWORK_POLICY=PASS'
