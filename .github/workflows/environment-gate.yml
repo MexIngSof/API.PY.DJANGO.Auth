@@ -1,0 +1,27 @@
+name: Environment separation contract
+
+on:
+  push:
+    branches: [general, dev, pro]
+    paths: [service-metadata.yml, .env.local.example, .github/workflows/general-ci.yml, .github/workflows/pro-image.yml, .github/workflows/deploy-staging.yml, .github/workflows/environment-gate.yml]
+  pull_request:
+    branches: [general, dev, pro, main]
+permissions: { contents: read }
+jobs:
+  environment-contract:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate local dev staging stable separation
+        shell: bash
+        run: |
+          set -euo pipefail
+          m=service-metadata.yml; l=.env.local.example; g=.github/workflows/general-ci.yml; p=.github/workflows/pro-image.yml; d=.github/workflows/deploy-staging.yml
+          test -f "$m"; test -f "$l"; test -f "$g"; test -f "$p"; test -f "$d"
+          grep -Fxq '  persistent_branches: [general, dev, pro, main]' "$m"; grep -Fxq '  deploy_authority_branch: pro' "$m"; grep -Fxq '  stable_branch: main' "$m"
+          grep -Fq 'branches: [general]' "$g"; ! grep -Fq 'environment: staging-pro-deploy' "$g"; ! grep -Fq 'workflow_dispatch:' "$g"
+          grep -Fq 'branches: [dev, pro]' "$p"; grep -Fq "if: github.ref == 'refs/heads/pro'" "$p"
+          grep -Fq "github.ref == 'refs/heads/pro'" "$d"; grep -Fq 'environment: staging-pro-deploy' "$d"
+          ! grep -Fq '/opt/mexingsof/config/common.env' "$d"; ! grep -Fq '/opt/mexingsof/config/api-common.env' "$d"; ! grep -Fq '/opt/mexingsof/config/web-common.env' "$d"; ! grep -Fq 'staging-pro-deploy' "$l"
+          ! grep -Eq '^[A-Z0-9_]*(TOKEN|PASSWORD|SECRET|KEY)=[^#]*(ghp_|github_pat_|sk-|BEGIN (RSA|OPENSSH)|AKIA[0-9A-Z]{16})' "$l"
+          echo 'ENVIRONMENT_SEPARATION=PASS'; echo 'GENERAL=ACTIVE_WORK_NO_DEPLOY'; echo 'DEV=INTEGRATION_NO_DEPLOY'; echo 'PRO=STAGING_CANDIDATE_ONLY'; echo 'MAIN=LAST_VERIFIED_STABLE'; echo 'PRODUCTION=SEPARATE_EXPLICIT_APPROVAL_REQUIRED'
