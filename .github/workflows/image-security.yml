@@ -1,0 +1,24 @@
+name: Image security baseline
+on:
+  push:
+    branches: [general, dev, pro]
+    paths: [Dockerfile, service-metadata.yml, .github/workflows/image-security.yml]
+  pull_request:
+    branches: [general, dev, pro, main]
+permissions:
+  contents: read
+jobs:
+  image-security:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Validate non-root immutable image contract
+        run: |
+          set -euo pipefail
+          grep -Eq '^USER[[:space:]]+10001:10001$' Dockerfile
+          grep -Eq '^HEALTHCHECK[[:space:]]' Dockerfile
+          ! grep -Eq '^USER[[:space:]]+root([[:space:]]|$)' Dockerfile
+          ! grep -Eq '^FROM[[:space:]]+[^[:space:]]+:latest([[:space:]]|$)' Dockerfile
+          grep -Fxq '  image_policy: immutable_digest' service-metadata.yml
+          grep -Fxq '  rollback_required: true' service-metadata.yml
+          echo 'IMAGE_SECURITY=PASS'
