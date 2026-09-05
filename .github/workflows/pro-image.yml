@@ -102,8 +102,8 @@ jobs:
       TECNOTELEC_DB_PASSWORD: postgres
       TECNOTELEC_DJANGO_SECRET_KEY: ci-secret
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1
         with: { python-version: "3.10", cache: pip }
       - name: Install dependencies
         run: |
@@ -119,30 +119,48 @@ jobs:
 
   publish:
     needs: verify
-    if: github.ref == 'refs/heads/pro'
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
+        if: github.ref == 'refs/heads/pro'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build, scan and push
+      - name: Build, scan and emit SBOM
         env:
-          IMAGE: ghcr.io/mexingsof/api-py-django-auth:pro-${{ github.sha }}
+          IMAGE: ghcr.io/mexingsof/api-py-django-auth:${{ github.ref_name }}-${{ github.sha }}
         run: |
           set -euo pipefail
           docker build --pull --file Dockerfile --tag "$IMAGE" .
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:0.58.1 image --exit-code 1 --severity CRITICAL --ignore-unfixed "$IMAGE"
+          docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/work" aquasec/trivy:0.58.1 image --format cyclonedx --output /work/sbom.cdx.json "$IMAGE"
+          test -s sbom.cdx.json
+      - name: Push immutable image and emit component manifest
+        if: github.ref == 'refs/heads/pro'
+        env:
+          IMAGE: ghcr.io/mexingsof/api-py-django-auth:${{ github.ref_name }}-${{ github.sha }}
+        run: |
+          set -euo pipefail
           docker push "$IMAGE"
           digest="$(docker inspect --format='{{index .RepoDigests 0}}' "$IMAGE")"
           [[ "$digest" =~ ^ghcr\.io/mexingsof/[a-z0-9._-]+@sha256:[a-f0-9]{64}$ ]]
-          printf 'IMAGE_KEY=%s\nIMAGE_REF=%s\nSOURCE_REPOSITORY=%s\nSOURCE_SHA=%s\nSOURCE_BRANCH=pro\n' \
+          printf 'IMAGE_KEY=%s\nIMAGE_REF=%s\nSOURCE_REPOSITORY=%s\nSOURCE_SHA=%s\nSOURCE_BRANCH=pro\nSBOM=sbom.cdx.json\n' \
             'API_AUTH_IMAGE' "$digest" "$GITHUB_REPOSITORY" "$GITHUB_SHA" > component.env
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: github.ref == 'refs/heads/pro'
         with:
           name: component-image-api-py-django-auth-${{ github.sha }}
-          path: component.env
+          path: |
+            component.env
+            sbom.cdx.json
           if-no-files-found: error
           retention-days: 30
+      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
+        if: github.ref == 'refs/heads/dev'
+        with:
+          name: dev-sbom-api-py-django-auth-${{ github.sha }}
+          path: sbom.cdx.json
+          if-no-files-found: error
+          retention-days: 14
