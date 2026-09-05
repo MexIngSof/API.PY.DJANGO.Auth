@@ -1,0 +1,57 @@
+name: Observability policy
+
+on:
+  push:
+    branches: [general, dev, pro]
+    paths:
+      - config/**
+      - apps/gateway_core/middleware.py
+      - apps/observability/middleware.py
+      - routes/health_urls.py
+      - .github/workflows/observability-policy.yml
+  pull_request:
+    branches: [general, dev, pro, main]
+
+permissions:
+  contents: read
+
+jobs:
+  observability:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
+      - name: Validate executable observability contract
+        run: |
+          set -euo pipefail
+          python - <<'PY'
+          from pathlib import Path
+          import os, re
+
+          repo = os.environ["GITHUB_REPOSITORY"]
+
+          def require(path, tokens=()):
+              p = Path(path)
+              if not p.is_file():
+                  raise SystemExit(f"missing observability file: {path}")
+              text = p.read_text(encoding="utf-8")
+              for token in tokens:
+                  if token not in text:
+                      raise SystemExit(f"{path}: missing {token}")
+              return text
+
+          if repo == "MexIngSof/API.PY.DJANGO.Gateway":
+              require("apps/gateway_core/middleware.py", ("X-Request-ID", "X-Correlation-ID", "request.request_id", "request.correlation_id"))
+              require("apps/observability/middleware.py", ("json.dumps", "request_id", "correlation_id", "status_code", "duration_ms"))
+              health = require("routes/health_urls.py")
+              if not re.search(r'path\(\s*["\']health/', health):
+                  raise SystemExit("Gateway health route missing")
+          else:
+              require("config/observability.py", ("x-request-id", "x-correlation-id", "json.dumps", "request_id", "correlation_id", "status_code", "duration_ms"))
+              require("config/asgi.py", ("ObservabilityMiddleware", "get_asgi_application()"))
+              health = require("config/urls.py")
+              if not re.search(r'path\(\s*["\']health/', health):
+                  raise SystemExit("API health route missing")
+
+          print("OBSERVABILITY_EXECUTABLE_POLICY=PASS")
+          print(f"REPOSITORY={repo}")
+          PY
