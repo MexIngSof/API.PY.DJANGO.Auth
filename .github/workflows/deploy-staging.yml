@@ -23,11 +23,11 @@ jobs:
       DJANGO_SECRET_KEY: ${{ secrets.AUTH_DJANGO_SECRET_KEY }}
       DB_PORT: ${{ vars.DB_PORT }}
       AUTH_EMAIL_PROVIDER: ${{ vars.AUTH_EMAIL_PROVIDER }}
-      AWS_SES_FROM_EMAIL: ${{ vars.AWS_SES_FROM_EMAIL }}
-      AWS_SES_REGION: ${{ vars.AWS_SES_REGION }}
-      AWS_SES_RETURN_PATH: ${{ vars.AWS_SES_RETURN_PATH }}
-      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AUTH_AWS_SES_FROM_EMAIL: ${{ vars.AUTH_AWS_SES_FROM_EMAIL }}
+      AUTH_AWS_SES_REGION_NAME: ${{ vars.AUTH_AWS_SES_REGION_NAME }}
+      AUTH_EMAIL_RETURN_PATH: ${{ vars.AUTH_EMAIL_RETURN_PATH }}
+      AUTH_AWS_SES_ACCESS_KEY_ID: ${{ secrets.AUTH_AWS_SES_ACCESS_KEY_ID }}
+      AUTH_AWS_SES_SECRET_ACCESS_KEY: ${{ secrets.AUTH_AWS_SES_SECRET_ACCESS_KEY }}
       AUTH_EMAIL_DEFERRED_EXTERNAL: 'true'
       STAGING_DEPLOY_HOST: ${{ vars.STAGING_DEPLOY_HOST }}
       STAGING_DEPLOY_PORT: ${{ vars.STAGING_DEPLOY_PORT }}
@@ -48,8 +48,8 @@ jobs:
       - name: Materialize Auth-owned runtime
         run: |
           set -euo pipefail; umask 077; mkdir -p runtime
-          printf 'DB_HOST=db-postgresql\nPOSTGRES_HOST=db-postgresql\nDB_PORT=%s\nDB_NAME=%s\nDB_USER=%s\nAUTH_DB_NAME=%s\nAUTH_DB_USER=%s\nAUTH_EMAIL_PROVIDER=%s\nAWS_SES_FROM_EMAIL=%s\nAWS_SES_REGION=%s\nAWS_SES_RETURN_PATH=%s\nAUTH_EMAIL_DEFERRED_EXTERNAL=%s\n' "${DB_PORT:-5432}" "$DB_NAME" "$DB_USER" "$DB_NAME" "$DB_USER" "$AUTH_EMAIL_PROVIDER" "$AWS_SES_FROM_EMAIL" "$AWS_SES_REGION" "$AWS_SES_RETURN_PATH" "$AUTH_EMAIL_DEFERRED_EXTERNAL" > "runtime/$SERVICE.env"
-          printf 'DB_PASSWORD=%s\nDJANGO_SECRET_KEY=%s\nAUTH_DB_PASSWORD=%s\nAUTH_DJANGO_SECRET_KEY=%s\nAWS_ACCESS_KEY_ID=%s\nAWS_SECRET_ACCESS_KEY=%s\n' "$DB_PASSWORD" "$DJANGO_SECRET_KEY" "$DB_PASSWORD" "$DJANGO_SECRET_KEY" "$AWS_ACCESS_KEY_ID" "$AWS_SECRET_ACCESS_KEY" > "runtime/$SERVICE.secrets.env"; chmod 0600 runtime/*
+          printf 'DB_HOST=db-postgresql\nPOSTGRES_HOST=db-postgresql\nDB_PORT=%s\nDB_NAME=%s\nDB_USER=%s\nAUTH_DB_NAME=%s\nAUTH_DB_USER=%s\nAUTH_EMAIL_PROVIDER=%s\nAUTH_AWS_SES_FROM_EMAIL=%s\nAUTH_AWS_SES_REGION_NAME=%s\nAUTH_EMAIL_RETURN_PATH=%s\nAUTH_EMAIL_DEFERRED_EXTERNAL=%s\n' "${DB_PORT:-5432}" "$DB_NAME" "$DB_USER" "$DB_NAME" "$DB_USER" "$AUTH_EMAIL_PROVIDER" "$AUTH_AWS_SES_FROM_EMAIL" "$AUTH_AWS_SES_REGION_NAME" "$AUTH_EMAIL_RETURN_PATH" "$AUTH_EMAIL_DEFERRED_EXTERNAL" > "runtime/$SERVICE.env"
+          printf 'DB_PASSWORD=%s\nDJANGO_SECRET_KEY=%s\nAUTH_DB_PASSWORD=%s\nAUTH_DJANGO_SECRET_KEY=%s\nAUTH_AWS_SES_ACCESS_KEY_ID=%s\nAUTH_AWS_SES_SECRET_ACCESS_KEY=%s\n' "$DB_PASSWORD" "$DJANGO_SECRET_KEY" "$DB_PASSWORD" "$DJANGO_SECRET_KEY" "$AUTH_AWS_SES_ACCESS_KEY_ID" "$AUTH_AWS_SES_SECRET_ACCESS_KEY" > "runtime/$SERVICE.secrets.env"; chmod 0600 runtime/*
       - name: Configure SSH
         run: |
           set -euo pipefail; install -d -m 0700 "$HOME/.ssh"; printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/key"; printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"; chmod 0600 "$HOME/.ssh/"{key,known_hosts}; printf 'Host staging-api\n  HostName %s\n  Port %s\n  User %s\n  IdentityFile ~/.ssh/key\n  UserKnownHostsFile ~/.ssh/known_hosts\n  StrictHostKeyChecking yes\n  IdentitiesOnly yes\n' "$STAGING_DEPLOY_HOST" "${STAGING_DEPLOY_PORT:-22}" "$STAGING_DEPLOY_USER" > "$HOME/.ssh/config"; chmod 0600 "$HOME/.ssh/config"; ssh -o BatchMode=yes staging-api 'test "$(id -u)" -ne 0'
