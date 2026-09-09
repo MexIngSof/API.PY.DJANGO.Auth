@@ -1,9 +1,12 @@
 name: API Auth PRO image
 
 on:
-  push:
-    branches: [dev, pro]
   workflow_dispatch:
+    inputs:
+      confirm:
+        description: Type BUILD_AUTH_FOR_VPS
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -11,6 +14,7 @@ permissions:
 
 jobs:
   verify:
+    if: github.ref == 'refs/heads/pro' && inputs.confirm == 'BUILD_AUTH_FOR_VPS'
     runs-on: ubuntu-24.04
     services:
       postgres:
@@ -119,11 +123,11 @@ jobs:
 
   publish:
     needs: verify
+    if: github.ref == 'refs/heads/pro' && inputs.confirm == 'BUILD_AUTH_FOR_VPS'
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09
       - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f
-        if: github.ref == 'refs/heads/pro'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
@@ -138,7 +142,6 @@ jobs:
           docker run --rm -v /var/run/docker.sock:/var/run/docker.sock -v "$PWD:/work" aquasec/trivy:0.58.1 image --format cyclonedx --output /work/sbom.cdx.json "$IMAGE"
           test -s sbom.cdx.json
       - name: Push immutable image and emit component manifest
-        if: github.ref == 'refs/heads/pro'
         env:
           IMAGE: ghcr.io/mexingsof/api-py-django-auth:${{ github.ref_name }}-${{ github.sha }}
         run: |
@@ -149,7 +152,6 @@ jobs:
           printf 'IMAGE_KEY=%s\nIMAGE_REF=%s\nSOURCE_REPOSITORY=%s\nSOURCE_SHA=%s\nSOURCE_BRANCH=pro\nSBOM=sbom.cdx.json\n' \
             'API_AUTH_IMAGE' "$digest" "$GITHUB_REPOSITORY" "$GITHUB_SHA" > component.env
       - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        if: github.ref == 'refs/heads/pro'
         with:
           name: component-image-api-py-django-auth-${{ github.sha }}
           path: |
@@ -157,10 +159,3 @@ jobs:
             sbom.cdx.json
           if-no-files-found: error
           retention-days: 30
-      - uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4
-        if: github.ref == 'refs/heads/dev'
-        with:
-          name: dev-sbom-api-py-django-auth-${{ github.sha }}
-          path: sbom.cdx.json
-          if-no-files-found: error
-          retention-days: 14
