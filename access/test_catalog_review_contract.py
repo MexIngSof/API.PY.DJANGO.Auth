@@ -1,4 +1,6 @@
-from django.test import TestCase
+import importlib
+
+from django.test import SimpleTestCase, TestCase
 
 from access.models import ApplicationPermissions, ApplicationRoles, Permissions, RolePermissions
 from roles.models import Roles
@@ -15,6 +17,15 @@ CATALOG_REVIEW_PERMISSIONS = {
     "catalog.product.view_history",
     "catalog.product.bulk",
 }
+
+
+class CatalogReviewMigrationDependencyTests(SimpleTestCase):
+    def test_seed_migration_depends_on_role_display_name_schema(self):
+        migration = importlib.import_module(
+            "access.migrations.0030_seed_catalog_review_permissions"
+        )
+
+        self.assertIn(("roles", "0006_roles_display_name"), migration.Migration.dependencies)
 
 
 class CatalogReviewPermissionSeedTests(TestCase):

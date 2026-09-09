@@ -145,7 +145,10 @@ def revoke_catalog_review_permissions(apps, schema_editor):
 
 
 class Migration(migrations.Migration):
-    dependencies = [("access", "0029_refapart_supplier_manager_automotive_compatibility")]
+    dependencies = [
+        ("access", "0029_refapart_supplier_manager_automotive_compatibility"),
+        ("roles", "0006_roles_display_name"),
+    ]
 
     operations = [
         migrations.RunPython(
