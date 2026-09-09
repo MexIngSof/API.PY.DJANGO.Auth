@@ -1,5 +1,5 @@
 schema_version: 1
-framework_policy_version: "2026.09.1"
+framework_policy_version: "2026.09.3"
 component:
   code: auth
   kind: api
@@ -23,6 +23,7 @@ delivery:
   stable_branch: main
   image_policy: immutable_digest
   rollback_required: true
+  hosted_ci_policy: direct_owner_vps_dispatch_only
 contracts:
   compatibility_gate: required
   correlation_header: X-Request-ID
