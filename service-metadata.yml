@@ -12,11 +12,17 @@ runtime:
   network: mexingsof_pro
   internal_port: 8000
   health_path: /health/
+  readiness_path: /ready/
   environment_file: /opt/mexingsof/config/services/api-auth.env
   secrets_file: /opt/mexingsof/secrets/api-auth.env
 database:
   owner: self
+  logical_name: Auth
   logical_name_variable: AUTH_DB_NAME
+  user_policy: DB_USER_EQUALS_DB_NAME
+  domain_schema: Auth
+  runtime_schema: AuthRuntime
+  search_path: '"Auth","AuthRuntime",public'
 delivery:
   persistent_branches: [general, dev, pro, main]
   deploy_authority_branch: pro
@@ -29,3 +35,6 @@ contracts:
   correlation_header: X-Request-ID
 observability:
   log_format: json
+validation:
+  local_command: scripts/ci/local-validate.ps1
+  modes: [fast, full, release]
