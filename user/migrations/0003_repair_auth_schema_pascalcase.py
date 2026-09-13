@@ -79,7 +79,14 @@ ALTER TABLE IF EXISTS public.user_useraccount_groups SET SCHEMA "Auth";
 ALTER TABLE IF EXISTS public.user_useraccount_user_permissions SET SCHEMA "Auth";
 ALTER TABLE IF EXISTS public.django_content_type SET SCHEMA "AuthRuntime";
 ALTER TABLE IF EXISTS public.django_migrations SET SCHEMA "AuthRuntime";
-DROP TABLE IF EXISTS public.django_admin_log CASCADE;
+DO $$
+BEGIN
+    IF to_regclass('public.django_admin_log') IS NOT NULL
+       OR to_regclass('"Auth".django_admin_log') IS NOT NULL
+       OR to_regclass('"AuthRuntime".django_admin_log') IS NOT NULL THEN
+        RAISE EXCEPTION 'django_admin_log exists in Auth database; review explicitly before schema repair (destructive DROP is not permitted)';
+    END IF;
+END $$;
 """
 
 

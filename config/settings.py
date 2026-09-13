@@ -75,7 +75,7 @@ ASGI_APPLICATION = "config.asgi.application"
 def postgres_options():
     canonical = f'-c search_path="{DB_SCHEMA}","{DB_RUNTIME_SCHEMA}",public'
     if "test" in sys.argv:
-        return getenv("AUTH_TEST_POSTGRES_OPTIONS", canonical)
+        return getenv("AUTH_TEST_POSTGRES_OPTIONS", '-c search_path=public,"Auth","AuthRuntime"')
     return getenv("AUTH_POSTGRES_OPTIONS") or getenv("POSTGRES_OPTIONS") or canonical
 
 
@@ -94,15 +94,15 @@ def build_postgres_database_config():
     if database_url:
         return _assert_postgres_contract(dj_database_url.parse(database_url))
 
-    db_name = getenv("DB_NAME") or getenv("POSTGRES_DB") or getenv("AUTH_DB_NAME") or "Auth"
-    db_user = getenv("DB_USER") or getenv("POSTGRES_USER") or getenv("AUTH_DB_USER") or "Auth"
-    db_password = getenv("DB_PASSWORD") or getenv("POSTGRES_PASSWORD") or getenv("AUTH_DB_PASSWORD")
-    db_host = getenv("DB_HOST") or getenv("POSTGRES_HOST") or "localhost"
-    db_port = getenv("DB_PORT") or getenv("POSTGRES_PORT") or "5432"
+    db_name = getenv("AUTH_DB_NAME") or getenv("DB_NAME") or getenv("POSTGRES_DB") or "Auth"
+    db_user = getenv("AUTH_DB_USER") or getenv("DB_USER") or getenv("POSTGRES_USER") or "Auth"
+    db_password = getenv("AUTH_DB_PASSWORD") or getenv("DB_PASSWORD") or getenv("POSTGRES_PASSWORD")
+    db_host = getenv("AUTH_DB_HOST") or getenv("DB_HOST") or getenv("POSTGRES_HOST") or "localhost"
+    db_port = getenv("AUTH_DB_PORT") or getenv("DB_PORT") or getenv("POSTGRES_PORT") or "5432"
 
     if not db_password and len(sys.argv) > 1 and sys.argv[1] != "collectstatic":
         raise RuntimeError(
-            "Auth database password is not configured. Set DB_PASSWORD, POSTGRES_PASSWORD or AUTH_DB_PASSWORD."
+            "Auth database password is not configured. Set AUTH_DB_PASSWORD, DB_PASSWORD or POSTGRES_PASSWORD."
         )
 
     return _assert_postgres_contract(

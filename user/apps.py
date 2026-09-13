@@ -7,3 +7,4 @@ class UserConfig(AppConfig):
 
     def ready(self):
         import user.signals  # noqa: F401
+        import user.database_checks  # noqa: F401
