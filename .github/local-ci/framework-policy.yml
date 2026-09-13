@@ -31,7 +31,7 @@ jobs:
           test -f .github/PULL_REQUEST_TEMPLATE.md
           test -f .github/dependabot.yml
           grep -Fxq 'schema_version: 1' "$f"
-          grep -Fxq 'framework_policy_version: "2026.09.1"' "$f"
+          grep -Fxq 'framework_policy_version: "2026.09.3"' "$f"
           grep -Fxq '  deployment_owner: self' "$f"
           grep -Fxq '  ownership: SERVICE_ONLY' "$f"
           grep -Fxq '  network: mexingsof_pro' "$f"
