@@ -14,7 +14,7 @@ from auth.cookie_policy import resolve_cookie_policy
 # PROJECT INFO
 # ===============================
 PROJECT_NAME = "Auth"
-DB_SCHEMA = getenv("DB_SCHEMA", PROJECT_NAME)
+DB_SCHEMA = getenv("AUTH_DB_SCHEMA", getenv("DB_SCHEMA", PROJECT_NAME))
 DB_RUNTIME_SCHEMA = getenv("AUTH_DB_RUNTIME_SCHEMA", f"{PROJECT_NAME}Runtime")
 
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -61,7 +61,10 @@ ASGI_APPLICATION = 'config.asgi.application'
 def postgres_options():
     if "test" in sys.argv:
         return getenv("AUTH_TEST_POSTGRES_OPTIONS", '-c search_path=public,"Auth","AuthRuntime"')
-    return getenv("POSTGRES_OPTIONS", f'-c search_path="{DB_SCHEMA}","{DB_RUNTIME_SCHEMA}"')
+    return getenv(
+        "AUTH_POSTGRES_OPTIONS",
+        getenv("POSTGRES_OPTIONS", f'-c search_path="{DB_SCHEMA}","{DB_RUNTIME_SCHEMA}",public'),
+    )
 
 
 def build_postgres_database_config():
@@ -71,14 +74,14 @@ def build_postgres_database_config():
         config.setdefault("OPTIONS", {})
         config["OPTIONS"]["options"] = postgres_options()
         return config
-    db_name = getenv("DB_NAME") or getenv("POSTGRES_DB") or getenv("AUTH_DB_NAME") or "auth"
-    db_user = getenv("DB_USER") or getenv("POSTGRES_USER") or getenv("AUTH_DB_USER") or "auth_user"
-    db_password = getenv("DB_PASSWORD") or getenv("POSTGRES_PASSWORD") or getenv("AUTH_DB_PASSWORD")
-    db_host = getenv("DB_HOST") or getenv("POSTGRES_HOST") or "localhost"
-    db_port = getenv("DB_PORT") or getenv("POSTGRES_PORT") or "5432"
+    db_name = getenv("AUTH_DB_NAME") or getenv("DB_NAME") or getenv("POSTGRES_DB") or PROJECT_NAME
+    db_user = getenv("AUTH_DB_USER") or getenv("DB_USER") or getenv("POSTGRES_USER") or PROJECT_NAME
+    db_password = getenv("AUTH_DB_PASSWORD") or getenv("DB_PASSWORD") or getenv("POSTGRES_PASSWORD")
+    db_host = getenv("AUTH_DB_HOST") or getenv("DB_HOST") or getenv("POSTGRES_HOST") or "localhost"
+    db_port = getenv("AUTH_DB_PORT") or getenv("DB_PORT") or getenv("POSTGRES_PORT") or "5432"
     if not db_password and len(sys.argv) > 1 and sys.argv[1] != "collectstatic":
         raise RuntimeError(
-            "Auth database password is not configured. Set DB_PASSWORD, POSTGRES_PASSWORD or AUTH_DB_PASSWORD. SQLite is not allowed for Auth."
+            "Auth database password is not configured. Set AUTH_DB_PASSWORD, DB_PASSWORD or POSTGRES_PASSWORD. SQLite is not allowed for Auth."
         )
     return {
         "ENGINE": getenv("DB_ENGINE", "django.db.backends.postgresql"),
