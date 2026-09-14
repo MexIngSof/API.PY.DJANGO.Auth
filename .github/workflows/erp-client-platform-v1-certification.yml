@@ -62,7 +62,21 @@ jobs:
         run: python manage.py migrate --plan
       - name: Apply migrations
         run: python manage.py migrate --noinput
-      - name: Auth database contract regression tests
-        run: python manage.py test user.test_database_checks --skip-checks --verbosity 2
+      - name: Auth database contract regression test
+        run: |
+          python - <<'PY'
+          import os
+          import unittest
+          import django
+
+          os.environ.setdefault("DJANGO_SETTINGS_MODULE", "config.settings")
+          django.setup()
+          suite = unittest.defaultTestLoader.loadTestsFromName(
+              "user.test_database_checks.AuthDatabaseConfigurationCheckTests."
+              "test_django_temporary_database_is_allowed_only_during_test_execution"
+          )
+          result = unittest.TextTestRunner(verbosity=2).run(suite)
+          raise SystemExit(0 if result.wasSuccessful() else 1)
+          PY
       - name: Customer enterprise permission seed tests
         run: python manage.py test access.test_customer_enterprise_permissions --verbosity 2
