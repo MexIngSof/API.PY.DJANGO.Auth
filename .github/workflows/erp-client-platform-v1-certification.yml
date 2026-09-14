@@ -27,19 +27,19 @@ jobs:
       postgres:
         image: postgres:14.4
         env:
-          POSTGRES_DB: auth_test
-          POSTGRES_USER: auth_test
+          POSTGRES_DB: Auth
+          POSTGRES_USER: Auth
           POSTGRES_PASSWORD: auth_test_password
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U auth_test -d auth_test"
+          --health-cmd "pg_isready -U Auth -d Auth"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
     env:
       DJANGO_SECRET_KEY: feature-ci-not-production
-      DATABASE_URL: postgresql://auth_test:auth_test_password@127.0.0.1:5432/auth_test
+      DATABASE_URL: postgresql://Auth:auth_test_password@127.0.0.1:5432/Auth
       AUTH_TEST_POSTGRES_OPTIONS: -c search_path=public,"Auth","AuthRuntime"
       DEVELOPMENT_MODE: "True"
       AUTH_EMAIL_DEFERRED_EXTERNAL: "true"
