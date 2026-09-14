@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 from django.test import SimpleTestCase, override_settings
 
 from user.database_checks import auth_database_configuration_check
@@ -16,6 +18,35 @@ class AuthDatabaseConfigurationCheckTests(SimpleTestCase):
     )
     def test_canonical_configuration_has_no_errors(self):
         self.assertEqual(auth_database_configuration_check(None), [])
+
+    @override_settings(
+        DATABASES={
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": "test_Auth",
+                "USER": "Auth",
+                "OPTIONS": {"options": '-c search_path=public,"Auth","AuthRuntime"'},
+            }
+        }
+    )
+    def test_django_temporary_database_is_allowed_only_during_test_execution(self):
+        with patch("user.database_checks.sys.argv", ["manage.py", "test", "user.test_database_checks"]):
+            self.assertEqual(auth_database_configuration_check(None), [])
+
+    @override_settings(
+        DATABASES={
+            "default": {
+                "ENGINE": "django.db.backends.postgresql",
+                "NAME": "test_Auth",
+                "USER": "Auth",
+                "OPTIONS": {"options": '-c search_path="Auth","AuthRuntime",public'},
+            }
+        }
+    )
+    def test_temporary_database_name_is_rejected_outside_test_execution(self):
+        with patch("user.database_checks.sys.argv", ["manage.py", "check"]):
+            errors = auth_database_configuration_check(None)
+        self.assertIn("auth.E002", {error.id for error in errors})
 
     @override_settings(
         DATABASES={
