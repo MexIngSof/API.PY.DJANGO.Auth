@@ -8,6 +8,7 @@ class JobCronProductImportPermissionContractTests(TestCase):
     permission_codes = {
         "jobcron.product_import.read",
         "jobcron.product_import.preview",
+        "jobcron.product_import.create",
         "jobcron.product_import.validate",
         "jobcron.product_import.execute",
         "jobcron.product_import.retry",
@@ -48,6 +49,7 @@ class JobCronProductImportPermissionContractTests(TestCase):
         self.assertEqual(actions["jobcron.product_import.read"], "READ")
         self.assertEqual(actions["jobcron.product_import.preview"], "READ")
         for code in {
+            "jobcron.product_import.create",
             "jobcron.product_import.validate",
             "jobcron.product_import.execute",
             "jobcron.product_import.retry",
