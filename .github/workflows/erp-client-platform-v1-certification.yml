@@ -80,3 +80,5 @@ jobs:
           PY
       - name: Customer enterprise permission seed tests
         run: python manage.py test access.test_customer_enterprise_permissions --verbosity 2
+      - name: JobCron Product Import permission seed tests
+        run: python manage.py test access.test_jobcron_product_import_permissions --verbosity 2
