@@ -8,6 +8,7 @@ MODULE_PATH = "/admin/product-import"
 PERMISSIONS = {
     "jobcron.product_import.read": "READ",
     "jobcron.product_import.preview": "READ",
+    "jobcron.product_import.create": "EXECUTE",
     "jobcron.product_import.validate": "EXECUTE",
     "jobcron.product_import.execute": "EXECUTE",
     "jobcron.product_import.retry": "EXECUTE",
