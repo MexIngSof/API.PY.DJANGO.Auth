@@ -14,12 +14,24 @@ def _options_text(database):
     return str((database.get("OPTIONS") or {}).get("options") or "")
 
 
+def _is_test_execution():
+    return "test" in sys.argv
+
+
+def _database_name_is_allowed(name):
+    if name == CANONICAL_DATABASE_NAME:
+        return True
+    return _is_test_execution() and name == f"test_{CANONICAL_DATABASE_NAME}"
+
+
 @register(Tags.database)
 def auth_database_configuration_check(app_configs, **kwargs):
     """Validate Auth PostgreSQL identity before any SQL is executed.
 
     This check validates configuration only. Physical schema/table placement is
     certified separately by the PostgreSQL ownership/schema-purpose gates.
+    Django's standard temporary database name is accepted only while executing
+    the test command; normal runtime remains pinned to the canonical Auth DB.
     """
 
     database = (settings.DATABASES or {}).get("default") or {}
@@ -38,11 +50,11 @@ def auth_database_configuration_check(app_configs, **kwargs):
             )
         )
 
-    if name != CANONICAL_DATABASE_NAME:
+    if not _database_name_is_allowed(name):
         errors.append(
             Error(
                 f"Auth database NAME must be {CANONICAL_DATABASE_NAME!r}, found {name!r}.",
-                hint="Use AUTH_DB_NAME=Auth.",
+                hint="Use AUTH_DB_NAME=Auth; Django test execution may use test_Auth.",
                 id="auth.E002",
             )
         )
@@ -51,7 +63,7 @@ def auth_database_configuration_check(app_configs, **kwargs):
         errors.append(
             Error(
                 f"Auth database USER must be {CANONICAL_DATABASE_USER!r}, found {user!r}.",
-                hint="DB_USER must equal DB_NAME exactly: AUTH_DB_USER=Auth.",
+                hint="DB_USER must equal the canonical runtime identity: AUTH_DB_USER=Auth.",
                 id="auth.E003",
             )
         )
@@ -64,7 +76,7 @@ def auth_database_configuration_check(app_configs, **kwargs):
                 id="auth.E004",
             )
         )
-    elif "test" not in sys.argv:
+    elif not _is_test_execution():
         search_path = options.split("search_path=", 1)[-1].strip()
         if not search_path.startswith(f'"{CANONICAL_DOMAIN_SCHEMA}"'):
             errors.append(
