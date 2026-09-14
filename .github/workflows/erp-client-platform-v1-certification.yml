@@ -7,6 +7,7 @@ on:
     paths:
       - "access/**"
       - "roles/**"
+      - "user/**"
       - "config/**"
       - "requirements.txt"
       - ".github/workflows/erp-client-platform-v1-certification.yml"
@@ -61,5 +62,7 @@ jobs:
         run: python manage.py migrate --plan
       - name: Apply migrations
         run: python manage.py migrate --noinput
+      - name: Auth database contract regression tests
+        run: python manage.py test user.test_database_checks --skip-checks --verbosity 2
       - name: Customer enterprise permission seed tests
         run: python manage.py test access.test_customer_enterprise_permissions --verbosity 2
