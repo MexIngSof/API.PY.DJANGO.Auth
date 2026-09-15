@@ -219,6 +219,7 @@ def record_successful_session(request, user, access_token_value, refresh_token_v
         application=application,
         metadata={"session_id": session.SessionID},
     )
+    return session
 
 
 class CustomProviderAuthView(ProviderAuthView):
@@ -241,7 +242,13 @@ class CustomProviderAuthView(ProviderAuthView):
             sync_social_account(provider, user)
 
             if user and access_token and refresh_token:
-                record_successful_session(request, user, access_token, refresh_token)
+                session = record_successful_session(
+                    request,
+                    user,
+                    access_token,
+                    refresh_token,
+                )
+                response.data["session_id"] = session.SessionID
 
             response.set_cookie(
                 "access",
@@ -309,7 +316,13 @@ class CustomTokenObtainPairView(TokenObtainPairView):
 
             record_login_attempt(request, email, True, user=user)
             if user and access_token and refresh_token:
-                record_successful_session(request, user, access_token, refresh_token)
+                session = record_successful_session(
+                    request,
+                    user,
+                    access_token,
+                    refresh_token,
+                )
+                response.data["session_id"] = session.SessionID
 
             response.set_cookie(
                 "access",
