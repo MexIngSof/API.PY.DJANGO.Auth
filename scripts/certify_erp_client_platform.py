@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Owner-local Auth runtime gate for ERP Client Platform V1.
 
-A PASS here proves only the Auth database/permission seed checks on PostgreSQL
+A PASS here proves only the Auth database/permission/session checks on PostgreSQL
 14.4. It does not prove cross-owner integration, E2E, or production readiness.
 """
 
@@ -42,6 +42,7 @@ def main() -> int:
         "user.test_database_checks.AuthDatabaseConfigurationCheckTests.test_django_temporary_database_is_allowed_only_during_test_execution",
         "access.test_customer_enterprise_permissions",
         "access.test_jobcron_product_import_permissions",
+        "auth.tests.test_mobile_session_revocation.MobileSessionContractTests",
         "--verbosity",
         "2",
     )
@@ -51,7 +52,7 @@ def main() -> int:
                 "component": "Auth",
                 "OWNER_LOCAL_RUNTIME_GATE": "PASS",
                 "database_requirement": "PostgreSQL 14.4",
-                "scope": "owner-local-product-platform-permissions",
+                "scope": "owner-local-product-platform-permissions-mobile-session",
             },
             sort_keys=True,
         )
