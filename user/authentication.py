@@ -3,7 +3,7 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from access.models import Applications
+from access.models import Applications, UserSessions
 
 
 class CustomJWTAuthentication(JWTAuthentication):
@@ -19,6 +19,23 @@ class CustomJWTAuthentication(JWTAuthentication):
 
         validated_token = self.get_validated_token(raw_token)
         user = self.get_user(validated_token)
+
+        token_jti = str(validated_token.get("jti") or "")
+        if token_jti:
+            tracked_session = (
+                UserSessions.objects.filter(
+                    UserID=user,
+                    AccessTokenJti=token_jti,
+                )
+                .only("SessionID", "RevokedAt", "IsOnline")
+                .order_by("-StartedAt")
+                .first()
+            )
+            if tracked_session is not None and tracked_session.RevokedAt is not None:
+                raise AuthenticationFailed(
+                    "The authenticated session has been revoked.",
+                    code="SESSION_REVOKED",
+                )
 
         application_code = str(
             request.headers.get("X-Application-Code") or ""
