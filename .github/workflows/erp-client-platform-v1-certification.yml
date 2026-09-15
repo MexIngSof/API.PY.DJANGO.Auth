@@ -8,6 +8,7 @@ on:
       - "access/**"
       - "roles/**"
       - "user/**"
+      - "auth/tests/**"
       - "config/**"
       - "requirements.txt"
       - ".github/workflows/erp-client-platform-v1-certification.yml"
@@ -82,3 +83,5 @@ jobs:
         run: python manage.py test access.test_customer_enterprise_permissions --verbosity 2
       - name: JobCron Product Import permission seed tests
         run: python manage.py test access.test_jobcron_product_import_permissions --verbosity 2
+      - name: Mobile session contract tests
+        run: python manage.py test auth.tests.test_mobile_session_revocation --verbosity 2
