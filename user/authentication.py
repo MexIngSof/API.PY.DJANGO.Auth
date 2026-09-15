@@ -14,7 +14,9 @@ class CustomJWTAuthentication(JWTAuthentication):
         else:
             raw_token = request.COOKIES.get(settings.AUTH_COOKIE)
 
-        if raw_token is None:
+        # Django delete_cookie() leaves an empty cookie value in some clients.
+        # Empty credentials mean unauthenticated, not an invalid JWT.
+        if not raw_token:
             return None
 
         validated_token = self.get_validated_token(raw_token)
