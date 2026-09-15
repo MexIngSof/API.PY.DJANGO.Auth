@@ -1,10 +1,10 @@
 from django.urls import path, re_path
+
+from .mobile_session_views import CustomTokenRefreshView, LogoutView
 from .views import (
     CustomProviderAuthView,
     CustomTokenObtainPairView,
-    CustomTokenRefreshView,
     CustomTokenVerifyView,
-    LogoutView,
     RequiredPasswordChangeView,
 )
 
