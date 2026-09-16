@@ -146,3 +146,27 @@ class MobileSessionContractTests(TestCase):
 
         still_valid = self.bearer_get("/api/users/me/", second.data["access"])
         self.assertEqual(still_valid.status_code, 200)
+
+    def test_revoke_all_keep_current_uses_bearer_session_without_refresh_cookie(self):
+        first = self.login(fingerprint="android-device-first")
+        second = self.login(fingerprint="android-device-second")
+
+        # Android uses bearer + securely stored refresh token, not browser auth cookies.
+        self.client.cookies.clear()
+        response = self.client.post(
+            "/api/access/me/sessions/revoke-all/",
+            {"keep_current": True},
+            format="json",
+            HTTP_AUTHORIZATION=f"Bearer {second.data['access']}",
+            HTTP_X_APPLICATION_CODE=self.application.Code,
+        )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["kept_current"])
+        self.assertIsNotNone(UserSessions.objects.get(SessionID=first.data["session_id"]).RevokedAt)
+        current = UserSessions.objects.get(SessionID=second.data["session_id"])
+        self.assertIsNone(current.RevokedAt)
+        self.assertTrue(current.IsOnline)
+
+        still_valid = self.bearer_get("/api/users/me/", second.data["access"])
+        self.assertEqual(still_valid.status_code, 200)
