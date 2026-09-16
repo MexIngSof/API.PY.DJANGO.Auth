@@ -1,0 +1,27 @@
+# NON-EXECUTABLE LOCAL CI RECIPE.
+# This file intentionally lives outside .github/workflows so routine validation
+# does not consume GitHub-hosted runner minutes. Execute the equivalent commands
+# locally or through the explicit self-hosted certification workflow.
+name: ERP Client Platform V1 Auth Local Certification
+
+runtime:
+  python: "3.12"
+  postgresql: "14.4"
+
+environment:
+  DJANGO_SECRET_KEY: local-cert-not-production
+  DATABASE_URL: postgresql://Auth:auth_test_password@127.0.0.1:5432/Auth
+  AUTH_TEST_POSTGRES_OPTIONS: '-c search_path=public,"Auth","AuthRuntime"'
+  DEVELOPMENT_MODE: "True"
+  AUTH_EMAIL_DEFERRED_EXTERNAL: "true"
+
+commands:
+  - python -m pip check
+  - python manage.py check
+  - python manage.py makemigrations --check --dry-run
+  - python manage.py migrate --plan
+  - python manage.py migrate --noinput
+  - python manage.py test user.test_database_checks.AuthDatabaseConfigurationCheckTests.test_django_temporary_database_is_allowed_only_during_test_execution --verbosity 2
+  - python manage.py test access.test_customer_enterprise_permissions --verbosity 2
+  - python manage.py test access.test_jobcron_product_import_permissions --verbosity 2
+  - python manage.py test auth.tests.test_mobile_session_revocation --verbosity 2
