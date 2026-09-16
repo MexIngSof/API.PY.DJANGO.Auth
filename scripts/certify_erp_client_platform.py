@@ -15,6 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 
+# This gate is intentionally runnable on the approved self-hosted certification path.
 POSTGRESQL_14_4_ASSERTION = (
     "from django.db import connection; "
     "connection.ensure_connection(); "
