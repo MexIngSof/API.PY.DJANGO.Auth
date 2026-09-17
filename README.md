@@ -263,3 +263,11 @@ Las rutas de administracion viven bajo `/api/access/` y requieren usuario admin.
 python manage.py migrate
 python manage.py runserver
 ```
+
+## Canonical responsibility
+
+The canonical definition of this repository's purpose, ownership boundaries, allowed responsibilities and integration rules lives in `MexIngSof/Docs`.
+
+Canonical profile: `repository-catalog/api/api-py-django-auth.md`
+
+This README does not redefine domain ownership.
