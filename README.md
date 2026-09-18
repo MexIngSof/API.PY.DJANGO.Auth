@@ -1,5 +1,19 @@
 # API.PY.DJANGO.Auth
 
+Ser el owner de identidad de acceso del ecosistema: usuarios, credenciales, sesiones, MFA, recovery, roles, permisos y policy primitives.
+
+**Primary classification:** `API_SHARED`
+
+## Canonical responsibility
+
+The canonical definition of this repository's purpose, ownership boundaries, allowed responsibilities and integration rules lives in `MexIngSof/Docs`.
+
+Canonical profile: `repository-catalog/api/api-py-django-auth.md`
+
+This README does not redefine domain ownership.
+
+## Repository-local notes
+
 API Django responsable de autenticacion, usuarios, roles y permisos.
 
 ## Estandar local
