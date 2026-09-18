@@ -3,12 +3,15 @@ contract: transversal_http
 responsibility: uniform operational HTTP behavior shared by every core API
 endpoints:
   health: /health/
+  readiness: /ready/
 request:
   body: NONE
   request_id_header: X-Request-ID
   correlation_id_header: X-Correlation-ID
 response:
   health_success: HTTP_2XX
+  readiness_success: HTTP_2XX_WHEN_REQUIRED_DEPENDENCIES_REACHABLE
+  readiness_failure: HTTP_503
   request_id_header: X-Request-ID
   correlation_id_header: X-Correlation-ID
 errors: NON_2XX_ON_UNHEALTHY_OR_UNAVAILABLE
@@ -16,7 +19,8 @@ permissions: PLATFORM_PROBE_NO_END_USER_AUTH
 models: NONE
 migrations: NONE
 healthcheck: /health/
-tests: compatibility-gate AND general-ci
+readinesscheck: /ready/
+tests: compatibility-gate AND local-validation
 gateway_route: DIRECT_PLATFORM_PROBE_ONLY; BUSINESS_TRAFFIC_GATEWAY_ONLY
-frontend_consumption: FORBIDDEN_FOR_HEALTH_ENDPOINT
-compatibility: BACKWARD_COMPATIBLE_HEADERS_AND_HEALTH_PATH_REQUIRED
+frontend_consumption: FORBIDDEN_FOR_OPERATIONAL_ENDPOINTS
+compatibility: BACKWARD_COMPATIBLE_HEADERS_AND_OPERATIONAL_PATHS_REQUIRED
