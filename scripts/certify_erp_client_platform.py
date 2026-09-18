@@ -2,7 +2,7 @@
 """Owner-local Auth runtime gate for ERP Client Platform V1.
 
 A PASS here proves only the Auth database/permission/session checks on PostgreSQL
-14.4. It does not prove cross-owner integration, E2E, or production readiness.
+16.15. It does not prove cross-owner integration, E2E, or production readiness.
 """
 
 from __future__ import annotations
@@ -16,13 +16,13 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 
 # This gate is intentionally runnable on the approved self-hosted certification path.
-POSTGRESQL_14_4_ASSERTION = (
+POSTGRESQL_16_15_ASSERTION = (
     "from django.db import connection; "
     "connection.ensure_connection(); "
     "assert connection.vendor == 'postgresql', "
     "f'PostgreSQL required, got {connection.vendor}'; "
-    "assert getattr(connection, 'pg_version', None) == 140004, "
-    "f'PostgreSQL 14.4 required, got server_version={getattr(connection, chr(112)+chr(103)+chr(95)+chr(118)+chr(101)+chr(114)+chr(115)+chr(105)+chr(111)+chr(110), None)}'"
+    "assert getattr(connection, 'pg_version', None) == 160015, "
+    "f'PostgreSQL 16.15 required, got server_version={getattr(connection, chr(112)+chr(103)+chr(95)+chr(118)+chr(101)+chr(114)+chr(115)+chr(105)+chr(111)+chr(110), None)}'"
 )
 
 
@@ -35,7 +35,7 @@ def run(*args: str) -> None:
 def main() -> int:
     run("check")
     run("makemigrations", "--check", "--dry-run")
-    run("shell", "-c", POSTGRESQL_14_4_ASSERTION)
+    run("shell", "-c", POSTGRESQL_16_15_ASSERTION)
     run("migrate", "--plan")
     run("migrate", "--noinput")
     run(
@@ -52,7 +52,7 @@ def main() -> int:
             {
                 "component": "Auth",
                 "OWNER_LOCAL_RUNTIME_GATE": "PASS",
-                "database_requirement": "PostgreSQL 14.4",
+                "database_requirement": "PostgreSQL 16.15",
                 "scope": "owner-local-product-platform-permissions-mobile-session",
             },
             sort_keys=True,
