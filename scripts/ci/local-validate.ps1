@@ -17,7 +17,7 @@ Push-Location $root
 try {
     function Assert-Command([string]$Name) {
         if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) {
-            throw "BLOCKED: required command '$Name' is not available"
+            throw "BLOCKED_ENVIRONMENT: required command '$Name' is not available"
         }
     }
     function Invoke-Checked([string]$Label, [scriptblock]$Command) {
@@ -114,8 +114,8 @@ $transversalContract = Get-Content contracts/transversal-api.yml -Raw
     Invoke-Checked 'git diff --check' { git diff --check }
     Assert-Command python
     $pythonVersion = (& python -c 'import platform; print(platform.python_version())').Trim()
-    if ($LASTEXITCODE -ne 0) { throw 'BLOCKED: unable to inspect Python runtime' }
-    if ($pythonVersion -ne $expectedPython) { throw "BLOCKED: Python $expectedPython required; found $pythonVersion" }
+    if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_ENVIRONMENT: unable to inspect Python runtime' }
+    if ($pythonVersion -ne $expectedPython) { throw "BLOCKED_ENVIRONMENT: Python $expectedPython required; found $pythonVersion" }
 
     Invoke-Checked 'Python compile validation' { python -m compileall -q . -x '(^|/)(\.git|\.venv|venv|node_modules)/' }
 
