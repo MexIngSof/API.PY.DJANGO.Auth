@@ -31,12 +31,17 @@ try {
         if ($Text -notmatch $Pattern) { throw $Failure }
     }
 
-    foreach ($file in @('manage.py','requirements.txt','service-metadata.yml','Dockerfile','config/settings.py','config/asgi.py','config/observability.py','auth_health.py','config/urls.py','.env.local.example','scripts/certify_erp_client_platform.py')) {
+    foreach ($file in @('manage.py','requirements.txt','service-metadata.yml','Dockerfile','config/settings.py','config/asgi.py','config/observability.py','auth_health.py','config/urls.py','.env.local.example','scripts/certify_erp_client_platform.py','contracts/transversal-api.yml')) {
         if (-not (Test-Path -LiteralPath $file)) { throw "FAIL: missing required file $file" }
     }
 
     $metadata = Get-Content service-metadata.yml -Raw
-    foreach ($pattern in @(
+$transversalContract = Get-Content contracts/transversal-api.yml -Raw
+    foreach ($token in @('contract: transversal_http','health: /health/','readiness: /ready/','request_id_header: X-Request-ID','correlation_id_header: X-Correlation-ID','BUSINESS_TRAFFIC_GATEWAY_ONLY')) {
+        if ($transversalContract -notmatch [regex]::Escape($token)) { throw "FAIL: transversal API contract token missing: $token" }
+    }
+
+        foreach ($pattern in @(
         'framework_policy_version:\s*["'']2026\.09\.3["'']',
         'api_platform_baseline:\s*["'']django-api-2026\.09["'']',
         'api_platform_adoption_state:\s*CANDIDATE',
