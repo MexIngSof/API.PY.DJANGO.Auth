@@ -120,13 +120,13 @@ BRANDS = {
         "headline": "Operacion segura para tu consola ERP",
         "voice": "JobCron usa mensajes compactos y operativos para que el equipo vuelva rapido al flujo diario.",
     },
-    "IMAGRAFITY": {
-        "CommercialName": "Imagrafity",
+    "CREACTIVA": {
+        "CommercialName": "Creactiva",
         "LogoUrl": "",
         "PrimaryColor": "#334155",
-        "SenderEmail": "no-reply@imagrafity.local",
-        "SenderName": "Imagrafity",
-        "BaseDomain": "imagrafity.local",
+        "SenderEmail": "no-reply@creactiva.local",
+        "SenderName": "Creactiva",
+        "BaseDomain": "creactiva.local",
         "RedirectBaseUrl": "",
         "surface": "#FFFFFF",
         "background": "#F8FAFC",
