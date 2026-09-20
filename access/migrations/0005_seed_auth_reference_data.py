@@ -5,7 +5,7 @@ APPLICATIONS = [
     ("TECNOTELEC", "Tecno Telec"),
     ("LEXNOVA", "LexNova"),
     ("JOBCRON", "JobCron"),
-    ("IMAGRAFITY", "Imagrafity"),
+    ("CREACTIVA", "Creactiva"),
 ]
 
 ROLES = [
