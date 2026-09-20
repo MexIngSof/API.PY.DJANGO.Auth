@@ -16,7 +16,7 @@ TARGETS = (
 
 class CreactivaBrandIdentitySourceTests(unittest.TestCase):
     def test_legacy_brand_name_is_absent_from_auth_source(self):
-        legacy = "imagrafity"
+        legacy = "imagra" + "fity"
         offenders = []
         for relative in TARGETS:
             source = (ROOT / relative).read_text(encoding="utf-8")
