@@ -50,13 +50,13 @@ APPLICATIONS = [
         "sender": "Tecno Telec",
     },
     {
-        "code": "IMAGRAFITY",
-        "name": "Imagrafity",
+        "code": "CREACTIVA",
+        "name": "Creactiva",
         "description": "Personalizacion creativa y comercio visual.",
         "host": "http://localhost:3006",
         "logo": "http://localhost:3006/brand/logo.png",
         "primary": "#8B5CF6",
-        "sender": "Imagrafity",
+        "sender": "Creactiva",
     },
     {
         "code": "FISCORA",
