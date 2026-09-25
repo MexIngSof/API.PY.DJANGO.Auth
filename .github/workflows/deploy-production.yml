@@ -1,0 +1,180 @@
+# mexingsof-deploy-contract: 2026.09.2
+name: Deploy Auth API to production
+on:
+  workflow_dispatch:
+    inputs:
+      ci_run_id: { description: Successful PRO image run ID, required: true, type: string }
+      confirm: { description: Type DEPLOY_AUTH_PRODUCTION, required: true, type: string }
+permissions: { actions: read, contents: read, packages: read }
+concurrency: { group: api-auth-production, cancel-in-progress: false }
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/pro' && inputs.confirm == 'DEPLOY_AUTH_PRODUCTION'
+    runs-on: ubuntu-24.04
+    environment: production
+    env:
+      CI_RUN_ID: ${{ inputs.ci_run_id }}
+      SERVICE: api-auth
+      IMAGE_KEY: API_AUTH_IMAGE
+      IMAGE_PATTERN: '^ghcr\.io/mexingsof/api-py-django-auth@sha256:[a-f0-9]{64}$'
+      ARTIFACT_PREFIX: component-image-api-py-django-auth-
+      DB_NAME: ${{ vars.AUTH_DB_NAME }}
+      DB_USER: ${{ vars.AUTH_DB_USER }}
+      DB_PASSWORD: ${{ secrets.AUTH_DB_PASSWORD }}
+      DJANGO_SECRET_KEY: ${{ secrets.AUTH_DJANGO_SECRET_KEY }}
+      ENVIRONMENT: ${{ vars.ENVIRONMENT }}
+      DEVELOPMENT_MODE: ${{ vars.DEVELOPMENT_MODE }}
+      DJANGO_DEBUG: ${{ vars.DJANGO_DEBUG }}
+      DB_HOST: ${{ vars.DB_HOST }}
+      DB_PORT: ${{ vars.DB_PORT }}
+      POSTGRES_HOST: ${{ vars.POSTGRES_HOST }}
+      CORRELATION_HEADER: ${{ vars.CORRELATION_HEADER }}
+      LOG_FORMAT: ${{ vars.LOG_FORMAT }}
+      JOBCRON_SCHEDULER_ENABLED: ${{ vars.JOBCRON_SCHEDULER_ENABLED }}
+      ENABLE_SYSCOM_ETL_WORKER: ${{ vars.ENABLE_SYSCOM_ETL_WORKER }}
+      PRODUCTION_DEPLOY_HOST: ${{ vars.PRODUCTION_DEPLOY_HOST }}
+      PRODUCTION_DEPLOY_PORT: ${{ vars.PRODUCTION_DEPLOY_PORT }}
+      PRODUCTION_DEPLOY_USER: ${{ vars.PRODUCTION_DEPLOY_USER }}
+      PRODUCTION_GHCR_USERNAME: ${{ vars.PRODUCTION_GHCR_USERNAME }}
+      DEPLOY_SSH_PRIVATE_KEY: ${{ secrets.PRODUCTION_DEPLOY_SSH_PRIVATE_KEY }}
+      SSH_KNOWN_HOSTS: ${{ vars.PRODUCTION_SSH_KNOWN_HOSTS }}
+      PRODUCTION_GHCR_READ_TOKEN: ${{ secrets.PRODUCTION_GHCR_READ_TOKEN }}
+      API_CPU_LIMIT: ${{ vars.API_CPU_LIMIT }}
+      API_MEMORY_LIMIT: ${{ vars.API_MEMORY_LIMIT }}
+      AUTH_EMAIL_PROVIDER: ${{ vars.AUTH_EMAIL_PROVIDER }}
+      AWS_SES_FROM_EMAIL: ${{ vars.AWS_SES_FROM_EMAIL }}
+      AWS_SES_REGION: ${{ vars.AWS_SES_REGION }}
+      AWS_SES_RETURN_PATH: ${{ vars.AWS_SES_RETURN_PATH }}
+      LOG_MAX_FILES: ${{ vars.LOG_MAX_FILES }}
+      LOG_MAX_SIZE: ${{ vars.LOG_MAX_SIZE }}
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AUTH_EMAIL_DEFERRED_EXTERNAL: 'true'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - name: Resolve exact certified image
+        env: { GH_TOKEN: '${{ github.token }}' }
+        shell: bash
+        run: |
+          set -euo pipefail
+          run_json="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID")"
+          test "$(jq -r .conclusion <<<"$run_json")" = success
+          test "$(jq -r .head_branch <<<"$run_json")" = pro
+          source_sha="$(jq -r .head_sha <<<"$run_json")"; test "$source_sha" = "$GITHUB_SHA"
+          artifacts="$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$CI_RUN_ID/artifacts")"
+          ids="$(jq -r --arg p "$ARTIFACT_PREFIX" '.artifacts[]?|select(.expired==false and (.name|startswith($p)))|.id' <<<"$artifacts")"
+          test "$(grep -c . <<<"$ids")" -eq 1
+          mkdir -p evidence/component
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ids/zip" > evidence/component.zip
+          unzip -q evidence/component.zip -d evidence/component
+          image_ref="$(sed -n 's/^IMAGE_REF=//p' evidence/component/component.env)"
+          [[ "$image_ref" =~ $IMAGE_PATTERN ]]
+          grep -Fxq "SOURCE_SHA=$source_sha" evidence/component/component.env
+          grep -Fxq 'SOURCE_BRANCH=pro' evidence/component/component.env
+          test -s evidence/component/sbom.cdx.json
+          printf 'IMAGE_REF=%s\nSOURCE_SHA=%s\n' "$image_ref" "$source_sha" >> "$GITHUB_ENV"
+      - name: Materialize service-owned API runtime
+        shell: bash
+        run: |
+          set -euo pipefail; umask 077; mkdir -p runtime
+          {
+            printf 'ENVIRONMENT=%s\nDEVELOPMENT_MODE=%s\nDJANGO_DEBUG=%s\n' "$ENVIRONMENT" "$DEVELOPMENT_MODE" "$DJANGO_DEBUG"
+            printf 'DB_HOST=%s\nDB_PORT=%s\nPOSTGRES_HOST=%s\n' "$DB_HOST" "$DB_PORT" "$POSTGRES_HOST"
+            printf 'DB_NAME=%s\nDB_USER=%s\n' "$DB_NAME" "$DB_USER"
+            printf 'AUTH_DB_NAME=%s\nAUTH_DB_USER=%s\n' "$DB_NAME" "$DB_USER"
+            printf 'CORRELATION_HEADER=%s\nLOG_FORMAT=%s\n' "$CORRELATION_HEADER" "$LOG_FORMAT"
+            printf 'JOBCRON_SCHEDULER_ENABLED=%s\nENABLE_SYSCOM_ETL_WORKER=%s\n' "$JOBCRON_SCHEDULER_ENABLED" "$ENABLE_SYSCOM_ETL_WORKER"
+            printf 'API_CPU_LIMIT=%s\n' "$API_CPU_LIMIT"
+            printf 'API_MEMORY_LIMIT=%s\n' "$API_MEMORY_LIMIT"
+            printf 'AUTH_EMAIL_PROVIDER=%s\n' "$AUTH_EMAIL_PROVIDER"
+            printf 'AWS_SES_FROM_EMAIL=%s\n' "$AWS_SES_FROM_EMAIL"
+            printf 'AWS_SES_REGION=%s\n' "$AWS_SES_REGION"
+            printf 'AWS_SES_RETURN_PATH=%s\n' "$AWS_SES_RETURN_PATH"
+            printf 'LOG_MAX_FILES=%s\n' "$LOG_MAX_FILES"
+            printf 'LOG_MAX_SIZE=%s\n' "$LOG_MAX_SIZE"
+            printf 'AUTH_EMAIL_DEFERRED_EXTERNAL=true\n'
+          } > "runtime/$SERVICE.env"
+          {
+            printf 'DB_PASSWORD=%s\nDJANGO_SECRET_KEY=%s\n' "$DB_PASSWORD" "$DJANGO_SECRET_KEY"
+            printf 'AUTH_DB_PASSWORD=%s\nAUTH_DJANGO_SECRET_KEY=%s\n' "$DB_PASSWORD" "$DJANGO_SECRET_KEY"
+
+            printf 'AWS_ACCESS_KEY_ID=%s\n' "$AWS_ACCESS_KEY_ID"
+            printf 'AWS_SECRET_ACCESS_KEY=%s\n' "$AWS_SECRET_ACCESS_KEY"
+          } > "runtime/$SERVICE.secrets.env"
+          chmod 0600 runtime/*
+      - name: Configure strict SSH
+        shell: bash
+        run: |
+          set -euo pipefail; install -d -m 0700 "$HOME/.ssh"
+          printf '%s\n' "$DEPLOY_SSH_PRIVATE_KEY" > "$HOME/.ssh/key"
+          printf '%s\n' "$SSH_KNOWN_HOSTS" > "$HOME/.ssh/known_hosts"
+          chmod 0600 "$HOME/.ssh/"{key,known_hosts}
+          cat > "$HOME/.ssh/config" <<EOF
+          Host production-api
+            HostName $PRODUCTION_DEPLOY_HOST
+            Port ${PRODUCTION_DEPLOY_PORT:-22}
+            User $PRODUCTION_DEPLOY_USER
+            IdentityFile $HOME/.ssh/key
+            UserKnownHostsFile $HOME/.ssh/known_hosts
+            StrictHostKeyChecking yes
+            IdentitiesOnly yes
+            ConnectTimeout 20
+            ConnectionAttempts 3
+          EOF
+          chmod 0600 "$HOME/.ssh/config"
+          ssh -o BatchMode=yes production-api 'test "$(id -u)" -ne 0'
+      - name: Deploy only target API with transactional image/config rollback
+        shell: bash
+        run: |
+          set -euo pipefail
+          { printf '%s\n' "$PRODUCTION_GHCR_USERNAME"; printf '%s\n' "$PRODUCTION_GHCR_READ_TOKEN"; } | ssh production-api 'read -r u; read -r t; d=/tmp/mexingsof-docker-api-auth; install -d -m 0700 "$d"; printf "%s" "$t" | docker --config "$d" login ghcr.io -u "$u" --password-stdin >/dev/null'
+          scp "runtime/$SERVICE.env" production-api:"/opt/mexingsof/config/services/$SERVICE.env.next"
+          scp "runtime/$SERVICE.secrets.env" production-api:"/opt/mexingsof/secrets/$SERVICE.env.next"
+          printf '%s\n' "$IMAGE_REF" | ssh production-api 'cat > /opt/mexingsof/config/services/api-auth.image-ref'
+          ssh production-api 'SERVICE=api-auth IMAGE_KEY=API_AUTH_IMAGE bash -se' <<'REMOTE'
+          set -euo pipefail
+          compose=/opt/mexingsof/stacks/api/compose.pro.yml
+          runtime_env="/opt/mexingsof/config/services/$SERVICE.env"
+          runtime_secret="/opt/mexingsof/secrets/$SERVICE.env"
+          image_ref_file="/opt/mexingsof/config/services/$SERVICE.image-ref"
+          backup_dir="/opt/mexingsof/.deploy-backups/${SERVICE}-$(date +%s)-$$"
+          export DOCKER_CONFIG="/tmp/mexingsof-docker-$SERVICE"
+          install -d -m 0700 "$backup_dir" "$DOCKER_CONFIG"
+          test -f "$compose"; test -f "$runtime_env.next"; test -f "$runtime_secret.next"; test -f "$image_ref_file"
+          backup_file(){ local src="$1" name="$2"; if test -f "$src"; then cp -p "$src" "$backup_dir/$name"; else : > "$backup_dir/$name.absent"; fi; }
+          restore_file(){ local dst="$1" name="$2"; if test -f "$backup_dir/$name.absent"; then rm -f "$dst"; else cp -p "$backup_dir/$name" "$dst"; fi; }
+          previous="$(docker inspect -f '{{.Config.Image}}' "$SERVICE-pro" 2>/dev/null || true)"
+          rollback(){ rc=$?; trap - ERR; set +e; restore_file "$runtime_env" service.env; restore_file "$runtime_secret" service.secrets.env; rm -f "$runtime_env.next" "$runtime_secret.next" "$image_ref_file"; if test -n "$previous"; then for key in $(grep -oE '\$\{API_[A-Z0-9_]+_IMAGE' "$compose" | cut -c3- | sort -u); do export "$key=$previous"; done; export "$IMAGE_KEY=$previous"; docker compose -p mexingsof_api -f "$compose" up -d --no-deps --force-recreate "$SERVICE"; old=unknown; for n in $(seq 1 30); do old="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$SERVICE-pro" 2>/dev/null || true)"; test "$old" = healthy && break; sleep 5; done; else docker compose -p mexingsof_api -f "$compose" rm -sf "$SERVICE" || true; fi; rm -rf "$backup_dir" "$DOCKER_CONFIG"; exit "$rc"; }
+          trap 'rm -rf "$DOCKER_CONFIG"' EXIT
+          trap rollback ERR
+          services='api-address api-auth api-automotive api-business-discovery api-catalog api-customer api-gateway api-inventory api-jobcron api-pricing api-procurement api-refapart api-sales api-search api-supplier api-tecnotelec'
+          before="$(for s in $services; do test "$s" = "$SERVICE" || printf '%s=%s\n' "$s" "$(docker inspect -f '{{.Id}}' "$s-pro" 2>/dev/null || true)"; done)"
+          backup_file "$runtime_env" service.env; backup_file "$runtime_secret" service.secrets.env
+          mv -f "$runtime_env.next" "$runtime_env"; mv -f "$runtime_secret.next" "$runtime_secret"; chmod 0600 "$runtime_env" "$runtime_secret"
+          ref="$(cat "$image_ref_file")"; rm -f "$image_ref_file"
+          for key in $(grep -oE '\$\{API_[A-Z0-9_]+_IMAGE' "$compose" | cut -c3- | sort -u); do export "$key=$ref"; done
+          export "$IMAGE_KEY=$ref"
+          docker compose -p mexingsof_api -f "$compose" pull "$SERVICE"
+          docker compose -p mexingsof_api -f "$compose" run --rm --no-deps "$SERVICE" python manage.py migrate --noinput </dev/null
+          docker compose -p mexingsof_api -f "$compose" up -d --no-deps "$SERVICE"
+          status=unknown
+          for n in $(seq 1 30); do status="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$SERVICE-pro" 2>/dev/null || true)"; test "$status" = healthy && break; test "$status" = unhealthy && false; sleep 5; done
+          test "$status" = healthy
+          test "$(docker inspect -f '{{.Image}}' "$SERVICE-pro")" = "$(docker image inspect "$ref" -f '{{.Id}}')"
+          after="$(for s in $services; do test "$s" = "$SERVICE" || printf '%s=%s\n' "$s" "$(docker inspect -f '{{.Id}}' "$s-pro" 2>/dev/null || true)"; done)"
+          test "$before" = "$after"
+          trap - ERR; rm -rf "$backup_dir"
+          REMOTE
+      - name: Write redacted deployment evidence
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p evidence
+          printf 'SERVICE=%s\nSOURCE_SHA=%s\nIMAGE_REF=%s\nDEPLOYMENT_RUN_ID=%s\nRuntimeOwnership=SERVICE_ONLY\nSiblingIsolation=PASS\nSBOMRequired=true\nRollback=TRANSACTIONAL_IMAGE_CONFIG\n' "$SERVICE" "${SOURCE_SHA:-unknown}" "${IMAGE_REF:-unknown}" "$GITHUB_RUN_ID" > evidence/deployment.env
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        if: always()
+        with:
+          name: production-deploy-api-auth-${{ github.run_id }}
+          path: evidence
+          if-no-files-found: error
+          retention-days: 30
