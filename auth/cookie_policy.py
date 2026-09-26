@@ -32,7 +32,7 @@ def resolve_cookie_policy(
     operator, in which case SameSite=None is selected and the cookie remains host-only.
     """
     env = (environment or getenv("ENVIRONMENT") or "local").strip().lower()
-    auth_origin = (auth_origin or getenv("AUTH_PUBLIC_ORIGIN") or "http://localhost:8000").strip()
+    auth_origin = (auth_origin or getenv("AUTH_PUBLIC_ORIGIN") or "http://localhost:3000").strip()
     web_origins = web_origins if web_origins is not None else [
         item.strip() for item in getenv("AUTH_WEB_ORIGINS", "http://localhost:3000").split(",") if item.strip()
     ]
@@ -67,3 +67,4 @@ def resolve_cookie_policy(
         return CookiePolicy(secure=True, same_site="None", domain=None)
 
     return CookiePolicy(secure=secure, same_site="Lax", domain=None)
+
