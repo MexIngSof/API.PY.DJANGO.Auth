@@ -12,7 +12,7 @@ pwsh -File ./scripts/Set-AwsSesEnvironment.ps1 -Apply
 param([switch]$Apply)
 $ErrorActionPreference = 'Stop'
 $repository = 'MexIngSof/API.PY.DJANGO.Auth'
-$environment = 'staging-pro-deploy'
+$environment = 'production'
 $variables = @('AUTH_AWS_SES_REGION_NAME','AUTH_AWS_SES_FROM_EMAIL','AUTH_EMAIL_RETURN_PATH','AUTH_EMAIL_PROVIDER')
 $secrets = @('AUTH_AWS_SES_ACCESS_KEY_ID','AUTH_AWS_SES_SECRET_ACCESS_KEY')
 function Invoke-GhChecked([string[]]$Arguments) {
