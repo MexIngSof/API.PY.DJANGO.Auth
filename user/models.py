@@ -1,4 +1,4 @@
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Group, Permission, PermissionsMixin
 from django.db import models
 
 
@@ -39,6 +39,26 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     is_superuser = models.BooleanField(default=False, db_column="IsSuperuser")
     must_change_password = models.BooleanField(default=False, db_column="MustChangePassword")
     idApp = models.IntegerField(null=False, blank=False, db_column="ApplicationId")
+    groups = models.ManyToManyField(
+        Group,
+        blank=True,
+        help_text="The groups this user belongs to.",
+        related_name="user_set",
+        related_query_name="user",
+        through="UserAccountGroup",
+        through_fields=("useraccount", "group"),
+        verbose_name="groups",
+    )
+    user_permissions = models.ManyToManyField(
+        Permission,
+        blank=True,
+        help_text="Specific permissions for this user.",
+        related_name="user_set",
+        related_query_name="user",
+        through="UserAccountUserPermission",
+        through_fields=("useraccount", "permission"),
+        verbose_name="user permissions",
+    )
 
     objects = UserAccountManager()
 
@@ -50,3 +70,25 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
 
     def __str__(self):
         return self.email
+
+
+class UserAccountGroup(models.Model):
+    id = models.BigAutoField(primary_key=True, db_column="Id")
+    useraccount = models.ForeignKey(UserAccount, on_delete=models.CASCADE, db_column="UserAccountId")
+    group = models.ForeignKey(Group, on_delete=models.CASCADE, db_column="GroupId")
+
+    class Meta:
+        managed = False
+        db_table = "user_useraccount_groups"
+        unique_together = (("useraccount", "group"),)
+
+
+class UserAccountUserPermission(models.Model):
+    id = models.BigAutoField(primary_key=True, db_column="Id")
+    useraccount = models.ForeignKey(UserAccount, on_delete=models.CASCADE, db_column="UserAccountId")
+    permission = models.ForeignKey(Permission, on_delete=models.CASCADE, db_column="PermissionId")
+
+    class Meta:
+        managed = False
+        db_table = "user_useraccount_user_permissions"
+        unique_together = (("useraccount", "permission"),)

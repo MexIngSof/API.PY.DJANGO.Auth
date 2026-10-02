@@ -1,0 +1,7 @@
+"Database","Table","OldColumn","Model","Field","NewColumn","Classification"
+"Auth","user_useraccount_groups","id","APIs/API.PY.DJANGO.Auth/user/models.py:UserAccountGroup","id","Id","MODEL"
+"Auth","user_useraccount_groups","useraccount_id","APIs/API.PY.DJANGO.Auth/user/models.py:UserAccountGroup","useraccount","UserAccountId","MODEL"
+"Auth","user_useraccount_groups","group_id","APIs/API.PY.DJANGO.Auth/user/models.py:UserAccountGroup","group","GroupId","MODEL"
+"Auth","user_useraccount_user_permissions","id","APIs/API.PY.DJANGO.Auth/user/models.py:UserAccountUserPermission","id","Id","MODEL"
+"Auth","user_useraccount_user_permissions","useraccount_id","APIs/API.PY.DJANGO.Auth/user/models.py:UserAccountUserPermission","useraccount","UserAccountId","MODEL"
+"Auth","user_useraccount_user_permissions","permission_id","APIs/API.PY.DJANGO.Auth/user/models.py:UserAccountUserPermission","permission","PermissionId","MODEL"
