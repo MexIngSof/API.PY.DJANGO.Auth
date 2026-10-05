@@ -3,7 +3,8 @@ from rest_framework.exceptions import AuthenticationFailed
 from rest_framework.request import Request
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
-from access.models import Applications, UserSessions
+from access.models import UserSessions
+from user.application_scope import resolve_application_context
 
 
 class CustomJWTAuthentication(JWTAuthentication):
@@ -39,23 +40,11 @@ class CustomJWTAuthentication(JWTAuthentication):
                     code="SESSION_REVOKED",
                 )
 
-        application_code = str(
-            request.headers.get("X-Application-Code") or ""
-        ).strip().upper()
-        if application_code:
-            application = Applications.objects.filter(
-                Code=application_code,
-                IsActive=True,
-            ).only("ApplicationID").first()
-            if application is None:
-                raise AuthenticationFailed(
-                    "Requested application is not registered or active.",
-                    code="APPLICATION_NOT_REGISTERED",
-                )
-            if int(user.idApp) != int(application.ApplicationID):
-                raise AuthenticationFailed(
-                    "Authenticated user does not belong to the requested application.",
-                    code="APPLICATION_ACCESS_DENIED",
-                )
+        application = resolve_application_context(request)
+        if int(user.idApp) != int(application.ApplicationID):
+            raise AuthenticationFailed(
+                "Authenticated user does not belong to the requested application.",
+                code="APPLICATION_ACCESS_DENIED",
+            )
 
         return user, validated_token
