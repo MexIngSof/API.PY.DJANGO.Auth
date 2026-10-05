@@ -34,7 +34,8 @@ try {
     foreach ($file in @(
         'manage.py','requirements.txt','service-metadata.yml','Dockerfile','config/settings.py','config/asgi.py','config/observability.py',
         'auth_health.py','config/urls.py','.env.local.example','scripts/certify_erp_client_platform.py','contracts/transversal-api.yml',
-        'user/application_scope.py','auth/tests/test_trusted_application_context.py'
+        'user/application_scope.py','auth/tests/test_trusted_application_context.py',
+        'user/account_scope.py','user/scoped_views.py','auth/tests/test_application_scoped_identity_flows.py'
     )) {
         if (-not (Test-Path -LiteralPath $file)) { throw "FAIL: missing required file $file" }
     }
@@ -94,6 +95,16 @@ try {
         if ($applicationScope -notmatch [regex]::Escape($token)) { throw "FAIL: trusted application scope contract missing: $token" }
     }
 
+    $accountScope = Get-Content user/account_scope.py -Raw
+    foreach ($token in @('def normalize_email','def find_local_account','email__iexact','idApp=application.ApplicationID')) {
+        if ($accountScope -notmatch [regex]::Escape($token)) { throw "FAIL: application scoped account contract missing: $token" }
+    }
+
+    $scopedViews = Get-Content user/scoped_views.py -Raw
+    foreach ($token in @('ApplicationScopedTokenObtainPairView','ApplicationScopedUserViewSet','identity.password.reset.requested','APPLICATION_ACCESS_DENIED')) {
+        if ($scopedViews -notmatch [regex]::Escape($token)) { throw "FAIL: application scoped identity flow missing: $token" }
+    }
+
     $envText = Get-Content '.env.local.example' -Raw
     if ($envText -notmatch '(?m)^AUTH_DB_NAME=Auth\s*$' -or $envText -notmatch '(?m)^AUTH_DB_USER=Auth\s*$') { throw 'FAIL: canonical Auth DB identity is missing' }
     if ($envText -notmatch '(?m)^GATEWAY_INTERNAL_SHARED_SECRET=\s*$') { throw 'FAIL: trusted Gateway secret env contract is missing' }
@@ -103,6 +114,7 @@ try {
     $urls = Get-Content config/urls.py -Raw
     $health = Get-Content auth_health.py -Raw
     if ($urls -notmatch 'path\("health/"' -or $urls -notmatch 'path\("ready/"') { throw 'FAIL: health/readiness routes are required' }
+    if ($urls -notmatch 'ApplicationScopedUserViewSet') { throw 'FAIL: public identity routes are not application scoped' }
     if ($health -notmatch 'connection\.ensure_connection\(\)' -or $health -notmatch 'status=503') { throw 'FAIL: readiness must verify database connectivity' }
 
     $asgi = Get-Content config/asgi.py -Raw
