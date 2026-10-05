@@ -84,6 +84,20 @@ class RuntimeSecretKeyContractTests(unittest.TestCase):
         self.assertIn('"Auth"', database["OPTIONS"]["options"])
         self.assertIn('"AuthRuntime"', database["OPTIONS"]["options"])
 
+    def test_auth_db_uses_generic_runtime_connection_variables(self):
+        database = self._evaluate_database_config(
+            {
+                "DB_NAME": "Auth",
+                "DB_USER": "Auth",
+                "DB_PASSWORD": "synthetic-only-test-password",
+                "DB_HOST": "db-postgresql",
+                "DB_PORT": "5432",
+                "POSTGRES_OPTIONS": '-c search_path="Auth","AuthRuntime",public',
+            }
+        )
+        self.assertEqual(database["HOST"], "db-postgresql")
+        self.assertEqual(database["PORT"], "5432")
+        self.assertEqual(database["PASSWORD"], "synthetic-only-test-password")
     def test_user_admin_uses_inlines_for_custom_permission_through_models(self):
         tree = ast.parse(ADMIN.read_text(encoding="utf-8"))
         admin_class = next(

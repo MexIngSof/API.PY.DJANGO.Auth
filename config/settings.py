@@ -116,11 +116,11 @@ def build_postgres_database_config():
 
     config = {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": getenv("AUTH_DB_NAME", "Auth"),
-        "USER": getenv("AUTH_DB_USER", "Auth"),
-        "PASSWORD": getenv("AUTH_DB_PASSWORD", ""),
-        "HOST": getenv("AUTH_DB_HOST", "localhost"),
-        "PORT": getenv("AUTH_DB_PORT", "5432"),
+        "NAME": getenv("AUTH_DB_NAME", "") or getenv("DB_NAME", "Auth"),
+        "USER": getenv("AUTH_DB_USER", "") or getenv("DB_USER", "Auth"),
+        "PASSWORD": getenv("AUTH_DB_PASSWORD", "") or getenv("DB_PASSWORD", ""),
+        "HOST": getenv("AUTH_DB_HOST", "") or getenv("DB_HOST", "") or getenv("POSTGRES_HOST", "localhost"),
+        "PORT": getenv("AUTH_DB_PORT", "") or getenv("DB_PORT", "") or getenv("POSTGRES_PORT", "5432"),
         "OPTIONS": {},
     }
     if config.get("NAME") != config.get("USER"):
