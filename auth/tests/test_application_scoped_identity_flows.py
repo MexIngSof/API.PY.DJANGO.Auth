@@ -102,9 +102,17 @@ class ApplicationScopedIdentityFlowTests(SimpleTestCase):
         )
         message.send.assert_called_once_with([user.email])
 
-    def test_email_reset_routes_use_scoped_viewset(self):
-        reset_match = resolve("/api/users/reset_email/")
-        confirm_match = resolve("/api/users/reset_email_confirm/")
+    def test_all_live_identity_mutation_routes_use_scoped_viewset(self):
+        routes = (
+            "/api/users/activation/",
+            "/api/users/resend_activation/",
+            "/api/users/reset_password/",
+            "/api/users/reset_password_confirm/",
+            "/api/users/set_email/",
+            "/api/users/reset_email/",
+            "/api/users/reset_email_confirm/",
+        )
 
-        self.assertEqual(reset_match.func.cls, ApplicationScopedUserViewSet)
-        self.assertEqual(confirm_match.func.cls, ApplicationScopedUserViewSet)
+        for route in routes:
+            with self.subTest(route=route):
+                self.assertEqual(resolve(route).func.cls, ApplicationScopedUserViewSet)
