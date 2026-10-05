@@ -123,7 +123,10 @@ class ApplicationScopedUserViewSet(CustomUserViewSet):
         application, user = self._application_user_from_uid(request)
         if user is not None and not account_belongs_to_application(user, application):
             return Response(
-                {"code": "APPLICATION_ACCESS_DENIED", "detail": "Activation does not belong to this application."},
+                {
+                    "code": "APPLICATION_ACCESS_DENIED",
+                    "detail": "Activation does not belong to this application.",
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
         return super().activation(request, *args, **kwargs)
@@ -139,19 +142,16 @@ class ApplicationScopedUserViewSet(CustomUserViewSet):
                     [get_user_email(user)]
                 )
             except Exception:
-                return Response(
-                    {
-                        "code": "EMAIL_PROVIDER_UNAVAILABLE",
-                        "detail": "The activation email could not be sent.",
-                    },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
+                # Delivery failures are recorded by the email owner. Keep the
+                # public response generic to avoid account enumeration.
+                pass
+            else:
+                record_access_event(
+                    request,
+                    "identity.activation.resent",
+                    user=user,
+                    application=application,
                 )
-            record_access_event(
-                request,
-                "identity.activation.resent",
-                user=user,
-                application=application,
-            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def reset_password(self, request, *args, **kwargs):
@@ -165,24 +165,21 @@ class ApplicationScopedUserViewSet(CustomUserViewSet):
                     [get_user_email(user)]
                 )
             except Exception:
-                return Response(
-                    {
-                        "code": "EMAIL_PROVIDER_UNAVAILABLE",
-                        "detail": "The access email could not be sent.",
+                # Internal failure stays observable in EmailDeliveryLogs while
+                # the public contract remains anti-enumeration safe.
+                pass
+            else:
+                record_access_event(
+                    request,
+                    "identity.password.reset.requested",
+                    user=user,
+                    application=application,
+                    metadata={
+                        "first_access": bool(
+                            user.must_change_password and not user.has_usable_password()
+                        )
                     },
-                    status=status.HTTP_503_SERVICE_UNAVAILABLE,
                 )
-            record_access_event(
-                request,
-                "identity.password.reset.requested",
-                user=user,
-                application=application,
-                metadata={
-                    "first_access": bool(
-                        user.must_change_password and not user.has_usable_password()
-                    )
-                },
-            )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def reset_password_confirm(self, request, *args, **kwargs):
@@ -193,7 +190,10 @@ class ApplicationScopedUserViewSet(CustomUserViewSet):
 
         if not account_belongs_to_application(user, application):
             return Response(
-                {"code": "APPLICATION_ACCESS_DENIED", "detail": "Password reset does not belong to this application."},
+                {
+                    "code": "APPLICATION_ACCESS_DENIED",
+                    "detail": "Password reset does not belong to this application.",
+                },
                 status=status.HTTP_403_FORBIDDEN,
             )
 
@@ -215,4 +215,83 @@ class ApplicationScopedUserViewSet(CustomUserViewSet):
             context = {"user": user}
             to = [get_user_email(user)]
             djoser_settings.EMAIL.password_changed_confirmation(request, context).send(to)
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def set_username(self, request, *args, **kwargs):
+        application = resolve_application_context(request)
+        if not account_belongs_to_application(request.user, application):
+            return Response(
+                {
+                    "code": "APPLICATION_ACCESS_DENIED",
+                    "detail": "Email change does not belong to this application.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+        response = super().set_username(request, *args, **kwargs)
+        if response.status_code == status.HTTP_204_NO_CONTENT:
+            record_access_event(
+                request,
+                "identity.email.changed",
+                user=request.user,
+                application=application,
+            )
+        return response
+
+    def reset_username(self, request, *args, **kwargs):
+        application = resolve_application_context(request)
+        email = normalize_email(request.data.get("email"))
+        user = find_local_account(application, email, active_only=True)
+
+        if user is not None:
+            try:
+                djoser_settings.EMAIL.username_reset(request, {"user": user}).send(
+                    [get_user_email(user)]
+                )
+            except Exception:
+                pass
+            else:
+                record_access_event(
+                    request,
+                    "identity.email.reset.requested",
+                    user=user,
+                    application=application,
+                )
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    def reset_username_confirm(self, request, *args, **kwargs):
+        application = resolve_application_context(request)
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        user = serializer.user
+
+        if not account_belongs_to_application(user, application):
+            return Response(
+                {
+                    "code": "APPLICATION_ACCESS_DENIED",
+                    "detail": "Email reset does not belong to this application.",
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        User = get_user_model()
+        field_name = User.USERNAME_FIELD
+        new_value = serializer.data["new_" + field_name]
+        if field_name == "email":
+            new_value = normalize_email(new_value)
+        setattr(user, field_name, new_value)
+        if hasattr(user, "last_login"):
+            user.last_login = now()
+        user.save()
+
+        record_access_event(
+            request,
+            "identity.email.reset.confirmed",
+            user=user,
+            application=application,
+        )
+
+        if djoser_settings.USERNAME_CHANGED_EMAIL_CONFIRMATION:
+            context = {"user": user}
+            to = [get_user_email(user)]
+            djoser_settings.EMAIL.username_changed_confirmation(request, context).send(to)
         return Response(status=status.HTTP_204_NO_CONTENT)
