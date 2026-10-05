@@ -82,6 +82,13 @@ def _append_search_path(options, search_path):
         options["options"] = f"{existing} {token}".strip()
 
 
+def _configure_auth_search_path(options):
+    configured = (getenv("AUTH_POSTGRES_OPTIONS", "") or getenv("POSTGRES_OPTIONS", "")).strip()
+    if configured:
+        options["options"] = configured
+    _append_search_path(options, '"Auth","AuthRuntime",public')
+
+
 def build_postgres_database_config():
     db_url = getenv("DATABASE_URL", "").strip()
     if db_url:
@@ -96,7 +103,7 @@ def build_postgres_database_config():
         options = {}
         if query.get("options"):
             options["options"] = query["options"]
-        _append_search_path(options, '"Auth",public')
+        _configure_auth_search_path(options)
         return {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": db_name,
@@ -118,7 +125,7 @@ def build_postgres_database_config():
     }
     if config.get("NAME") != config.get("USER"):
         raise ImproperlyConfigured("DB_USER == DB_NAME is required")
-    _append_search_path(config["OPTIONS"], '"Auth",public')
+    _configure_auth_search_path(config["OPTIONS"])
     return config
 
 
