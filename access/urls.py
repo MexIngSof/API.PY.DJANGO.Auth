@@ -2,6 +2,11 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from access.mobile_session_views import MobileOwnUserSessionViewSet
+from access.scoped_admin_views import (
+    ApplicationScopedIdentityUserViewSet,
+    ApplicationScopedPermissionViewSet,
+    ApplicationScopedRoleViewSet,
+)
 from access.scoped_rbac_views import ApplicationScopedMePermissionsViewSet
 from access.views import (
     AccessAuditEventViewSet,
@@ -9,16 +14,13 @@ from access.views import (
     ApplicationPermissionViewSet,
     ApplicationRoleViewSet,
     ApplicationViewSet,
-    IdentityUserViewSet,
     LoginAttemptViewSet,
     MfaMethodViewSet,
     ModuleViewSet,
     PasswordHistoryViewSet,
-    PermissionViewSet,
     RecoveryCodeViewSet,
     RefreshTokenViewSet,
     RolePermissionViewSet,
-    RoleViewSet,
     SocialLoginAttemptViewSet,
     SocialProviderViewSet,
     UserSocialAccountViewSet,
@@ -30,14 +32,14 @@ from access.views import (
 
 router = DefaultRouter()
 router.register("applications", ApplicationViewSet, basename="applications")
-router.register("identity/users", IdentityUserViewSet, basename="identity-users")
+router.register("identity/users", ApplicationScopedIdentityUserViewSet, basename="identity-users")
 router.register("social-providers", SocialProviderViewSet, basename="social-providers")
 router.register("social-accounts", UserSocialAccountViewSet, basename="social-accounts")
 router.register("social-login-attempts", SocialLoginAttemptViewSet, basename="social-login-attempts")
 router.register("modules", ModuleViewSet, basename="modules")
 router.register("actions", ActionViewSet, basename="actions")
-router.register("roles", RoleViewSet, basename="roles")
-router.register("permissions", PermissionViewSet, basename="permissions")
+router.register("roles", ApplicationScopedRoleViewSet, basename="roles")
+router.register("permissions", ApplicationScopedPermissionViewSet, basename="permissions")
 router.register("role-permissions", RolePermissionViewSet, basename="role-permissions")
 router.register("user-permissions", UserPermissionViewSet, basename="user-permissions")
 router.register("application-roles", ApplicationRoleViewSet, basename="application-roles")
