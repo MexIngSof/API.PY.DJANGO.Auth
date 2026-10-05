@@ -156,6 +156,7 @@ try {
         Invoke-Checked 'Django deploy check' { python manage.py check --deploy }
         Invoke-Checked 'migration drift check' { python manage.py makemigrations --check --dry-run }
         Invoke-Checked 'migration plan' { python manage.py migrate --plan }
+        Invoke-Checked 'Task 3 scoped identity tests' { python manage.py test auth.tests.test_application_scoped_identity_flows -v 2 }
         Invoke-Checked 'Django tests' { python manage.py test -v 2 }
         Invoke-Checked 'owner-local PostgreSQL certification' { python scripts/certify_erp_client_platform.py }
     }
