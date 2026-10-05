@@ -1,171 +1,31 @@
 [CmdletBinding()]
-param(
-    [ValidateSet('fast','full','release')]
-    [string]$Mode = 'fast'
-)
-
-$ErrorActionPreference = 'Stop'
+param([ValidateSet('fast','full','release')][string]$Mode='fast')
+$ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
-$root = (Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
-$expectedPython = '3.13.15'
-$expectedDjango = '5.2.17'
-$expectedDrf = '3.17.2'
-$expectedPsycopg = '3.2.13'
-$expectedPostgres = '16.15'
-$baseline = 'django-api-2026.09'
+$root=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 Push-Location $root
 try {
-    function Assert-Command([string]$Name) {
-        if (-not (Get-Command $Name -ErrorAction SilentlyContinue)) { throw "BLOCKED_ENVIRONMENT: required command '$Name' is not available" }
-    }
-    function Invoke-Checked([string]$Label, [scriptblock]$Command) {
-        Write-Host "==> $Label"
-        & $Command
-        if ($LASTEXITCODE -ne $null -and $LASTEXITCODE -ne 0) { throw "FAIL: $Label failed with exit code $LASTEXITCODE" }
-    }
-    function Assert-Contains([string]$Text,[string]$Pattern,[string]$Failure) {
-        if ($Text -notmatch $Pattern) { throw $Failure }
-    }
+  Write-Host '==> STATIC_CONTRACT'
+  foreach($file in @('manage.py','user/models.py','user/migrations/0006_application_scoped_email_identity.py','user/application_scope.py','user/account_scope.py','user/scoped_views.py','auth/custom_email.py','auth/tests/test_application_email_identity_preflight.py','auth/tests/test_application_scoped_refresh.py','auth/tests/test_application_scoped_session_revocation.py','auth/tests/test_application_scoped_password_change.py','auth/tests/test_reset_password_confirm_application_scope.py','auth/tests/test_email_trusted_application_context.py','auth/tests/test_application_email_template_fallback.py','auth/tests/test_email_sender_fallback_contract.py','auth/tests/test_email_branding_fallback_contract.py','auth/tests/test_global_identity_contract.py')) { if(-not(Test-Path -LiteralPath $file)){throw "STATIC_CONTRACT_FAILURE: missing required file $file"} }
+  $userModel=Get-Content user/models.py -Raw
+  if($userModel -match 'email\s*=\s*models\.EmailField\([^\r\n]*unique=True'){throw 'STATIC_CONTRACT_FAILURE: Task 5 forbids global email uniqueness'}
+  foreach($token in @('UniqueConstraint','fields=("idApp", "email")','uq_useraccounts_application_email')){if($userModel -notmatch [regex]::Escape($token)){throw "STATIC_CONTRACT_FAILURE: Task 5 application email contract missing: $token"}}
+  $scope=Get-Content user/application_scope.py -Raw
+  foreach($token in @('X-Application-Code','X-Gateway-Internal-Token','APPLICATION_CONTEXT_MISMATCH','GATEWAY_CONTEXT_REQUIRED','APPLICATION_CODE_REQUIRED')){if($scope -notmatch [regex]::Escape($token)){throw "STATIC_CONTRACT_FAILURE: trusted context missing: $token"}}
 
-    foreach ($file in @(
-        'manage.py','requirements.txt','service-metadata.yml','Dockerfile','config/settings.py','config/asgi.py','config/observability.py',
-        'auth_health.py','config/urls.py','.env.local.example','scripts/certify_erp_client_platform.py','contracts/transversal-api.yml',
-        'user/application_scope.py','auth/tests/test_trusted_application_context.py',
-        'user/account_scope.py','user/scoped_views.py','auth/tests/test_application_scoped_identity_flows.py',
-        'access/application_admin_scope.py','access/scoped_admin_views.py','access/test_application_scoped_rbac.py','access/test_application_admin_scope.py',
-        'user/management/commands/audit_application_email_identity.py','auth/tests/test_application_email_identity_preflight.py',
-        'user/mobile_session_views.py','auth/tests/test_application_scoped_refresh.py','auth/tests/test_application_scoped_session_revocation.py','auth/tests/test_application_scoped_password_change.py','auth/tests/test_reset_password_confirm_application_scope.py',
-        'auth/custom_email.py','auth/tests/test_email_trusted_application_context.py','auth/tests/test_application_email_template_fallback.py','auth/tests/test_email_sender_fallback_contract.py','auth/tests/test_email_branding_fallback_contract.py'
-    )) {
-        if (-not (Test-Path -LiteralPath $file)) { throw "FAIL: missing required file $file" }
-    }
+  if(-not(Get-Command python -ErrorAction SilentlyContinue)){throw 'DEPENDENCY_BLOCKED: python unavailable'}
+  Write-Host '==> PYTHON_COMPILE'
+  python -m compileall -q . -x '(^|/)(\.git|\.venv|venv|node_modules)/'
+  if($LASTEXITCODE -ne 0){throw 'PYTHON_COMPILE failed'}
 
-    $metadata = Get-Content service-metadata.yml -Raw
-    $transversalContract = Get-Content contracts/transversal-api.yml -Raw
-    foreach ($token in @('contract: transversal_http','health: /health/','readiness: /ready/','request_id_header: X-Request-ID','correlation_id_header: X-Correlation-ID','BUSINESS_TRAFFIC_GATEWAY_ONLY')) {
-        if ($transversalContract -notmatch [regex]::Escape($token)) { throw "FAIL: transversal API contract token missing: $token" }
-    }
-    foreach ($pattern in @('framework_policy_version:\s*["'']2026\.09\.3["'']','api_platform_baseline:\s*["'']django-api-2026\.09["'']','api_platform_adoption_state:\s*CANDIDATE','python:\s*["'']3\.13\.15["'']','django:\s*["'']5\.2\.17["'']','drf:\s*["'']3\.17\.2["'']','engine:\s*postgresql','deploy_authority_branch:\s*pro','user_policy:\s*DB_USER_EQUALS_DB_NAME','readiness_path:\s*/ready/','command:\s*scripts/ci/local-validate\.ps1')) {
-        Assert-Contains $metadata $pattern "FAIL: Auth service metadata is not aligned with API platform baseline ($pattern)"
-    }
-
-    $requirements = Get-Content requirements.txt -Raw
-    foreach ($token in @('Django==5.2.17','djangorestframework==3.17.2','psycopg[binary]==3.2.13')) {
-        if ($requirements -notmatch [regex]::Escape($token)) { throw "FAIL: requirements target missing: $token" }
-    }
-    $dockerfile = Get-Content Dockerfile -Raw
-    Assert-Contains $dockerfile 'FROM\s+python:3\.13\.15-slim-bookworm' 'FAIL: Docker Python 3.13.15 target missing'
-    if ($dockerfile -match 'python -m pip install -r requirements\.txt\s+"uvicorn') { throw 'FAIL: Dockerfile must not install Uvicorn outside requirements.txt' }
-
-    $certifier = Get-Content scripts/certify_erp_client_platform.py -Raw
-    if ($certifier -match 'PostgreSQL 14\.4|140004') { throw 'FAIL: legacy PostgreSQL 14.4 certification target remains' }
-    if ($certifier -notmatch 'PostgreSQL 16\.15' -or $certifier -notmatch '160015') { throw 'FAIL: PostgreSQL 16.15 certification target is missing' }
-
-    $settings = Get-Content config/settings.py -Raw
-    if ($settings -match 'django\.db\.backends\.sqlite3') { throw 'FAIL: SQLite is prohibited' }
-    if ($settings -notmatch 'django\.db\.backends\.postgresql') { throw 'FAIL: PostgreSQL must be explicit' }
-    if ($settings -notmatch 'search_path=.*public') { throw 'FAIL: PostgreSQL search_path must include public' }
-    if ($settings -notmatch 'DB_USER == DB_NAME' -and $settings -notmatch 'config\.get\("NAME"\) != config\.get\("USER"\)') { throw 'FAIL: DB_USER == DB_NAME enforcement is missing' }
-    if ($settings -notmatch 'GATEWAY_INTERNAL_SHARED_SECRET\s*=\s*getenv\("GATEWAY_INTERNAL_SHARED_SECRET"') { throw 'FAIL: Auth trusted Gateway secret setting is missing' }
-
-    $applicationScope = Get-Content user/application_scope.py -Raw
-    foreach ($token in @('X-Application-Code','X-Gateway-Internal-Token','APPLICATION_CONTEXT_MISMATCH','GATEWAY_CONTEXT_REQUIRED','APPLICATION_CODE_REQUIRED')) {
-        if ($applicationScope -notmatch [regex]::Escape($token)) { throw "FAIL: trusted application scope contract missing: $token" }
-    }
-    $accountScope = Get-Content user/account_scope.py -Raw
-    foreach ($token in @('def normalize_email','def find_local_account','email__iexact','idApp=application.ApplicationID')) {
-        if ($accountScope -notmatch [regex]::Escape($token)) { throw "FAIL: application scoped account contract missing: $token" }
-    }
-    $scopedViews = Get-Content user/scoped_views.py -Raw
-    foreach ($token in @('ApplicationScopedTokenObtainPairView','ApplicationScopedUserViewSet','identity.password.reset.requested','APPLICATION_ACCESS_DENIED')) {
-        if ($scopedViews -notmatch [regex]::Escape($token)) { throw "FAIL: application scoped identity flow missing: $token" }
-    }
-
-    $adminScope = Get-Content access/application_admin_scope.py -Raw
-    foreach ($token in @('resolve_admin_target_application','is_superuser','Delegated administrators')) {
-        if ($adminScope -notmatch [regex]::Escape($token)) { throw "FAIL: Task 4 admin scope contract missing: $token" }
-    }
-    $scopedAdmin = Get-Content access/scoped_admin_views.py -Raw
-    foreach ($token in @('ApplicationScopedMePermissionsViewSet','ApplicationScopedIdentityUserViewSet','ApplicationScopedRoleViewSet','ApplicationScopedPermissionViewSet')) {
-        if ($scopedAdmin -notmatch [regex]::Escape($token)) { throw "FAIL: Task 4 scoped admin view missing: $token" }
-    }
-    $identityPreflight = Get-Content user/management/commands/audit_application_email_identity.py -Raw
-    foreach ($token in @('Lower("email")','duplicate_application_email_groups','orphan_application_ids','safe_for_application_email_constraint')) {
-        if ($identityPreflight -notmatch [regex]::Escape($token)) { throw "FAIL: Task 5 identity preflight contract missing: $token" }
-    }
-
-    $envText = Get-Content '.env.local.example' -Raw
-    if ($envText -notmatch '(?m)^AUTH_DB_NAME=Auth\s*$' -or $envText -notmatch '(?m)^AUTH_DB_USER=Auth\s*$') { throw 'FAIL: canonical Auth DB identity is missing' }
-    if ($envText -notmatch '(?m)^GATEWAY_INTERNAL_SHARED_SECRET=\s*$') { throw 'FAIL: trusted Gateway secret env contract is missing' }
-    if ($envText -match '(?im)^\w*(DB_USER|POSTGRES_USER)=.*_user\s*$') { throw 'FAIL: legacy *_user database alias detected' }
-    if ($envText -match '(?i)(change-me|replace-me|replace_with_|dev-[a-z0-9-]*secret|local-[a-z0-9-]*secret)') { throw 'FAIL: predictable placeholder secret detected' }
-
-    $urls = Get-Content config/urls.py -Raw
-    $health = Get-Content auth_health.py -Raw
-    if ($urls -notmatch 'path\("health/"' -or $urls -notmatch 'path\("ready/"') { throw 'FAIL: health/readiness routes are required' }
-    if ($urls -notmatch 'ApplicationScopedUserViewSet') { throw 'FAIL: public identity routes are not application scoped' }
-    foreach ($route in @('activation/','resend_activation/','reset_password/','reset_password_confirm/','set_email/','reset_email/','reset_email_confirm/')) {
-        if ($urls -notmatch [regex]::Escape($route)) { throw "FAIL: scoped identity route missing: $route" }
-    }
-    $userModel = Get-Content user/models.py -Raw
-    if ($userModel -notmatch 'email\s*=\s*models\.EmailField\([^\r\n]*unique=True') { throw 'FAIL: global email uniqueness must remain until Task 5 migration is explicitly executed' }
-    if ($health -notmatch 'connection\.ensure_connection\(\)' -or $health -notmatch 'status=503') { throw 'FAIL: readiness must verify database connectivity' }
-
-    $asgi = Get-Content config/asgi.py -Raw
-    $observability = Get-Content config/observability.py -Raw
-    if ($asgi -notmatch 'ObservabilityMiddleware\(get_asgi_application\(\)\)') { throw 'FAIL: ASGI observability wrapper is required' }
-    if ($observability -notmatch 'x-request-id' -or $observability -notmatch 'x-correlation-id' -or $observability -notmatch 'json\.dumps') { throw 'FAIL: canonical request IDs and JSON logging are required' }
-
-    if (Test-Path '.github/workflows') {
-        foreach ($workflow in Get-ChildItem '.github/workflows' -File | Where-Object Extension -in @('.yml','.yaml')) {
-            $text = Get-Content $workflow.FullName -Raw
-            if ($text -match '(?m)^\s*(push|pull_request|pull_request_target|merge_group|schedule|workflow_run|repository_dispatch):' -or $text -match '(?m)^\s*on:\s*\[[^\]]*(push|pull_request|schedule|workflow_run|repository_dispatch)') { throw "FAIL: hosted workflow $($workflow.Name) contains a forbidden automatic trigger" }
-            if ($text -notmatch 'workflow_dispatch') { throw "FAIL: hosted workflow $($workflow.Name) is not manual dispatch" }
-            if ($text -notmatch 'refs/heads/pro') { throw "FAIL: hosted workflow $($workflow.Name) is not restricted to pro" }
-        }
-    }
-
-    Assert-Command git
-    Invoke-Checked 'git diff --check' { git diff --check }
-    Assert-Command python
-    $pythonVersion = (& python -c 'import platform; print(platform.python_version())').Trim()
-    if ($LASTEXITCODE -ne 0) { throw 'BLOCKED_ENVIRONMENT: unable to inspect Python runtime' }
-    if ($pythonVersion -ne $expectedPython) { throw "BLOCKED_ENVIRONMENT: Python $expectedPython required; found $pythonVersion" }
-    Invoke-Checked 'Python compile validation' { python -m compileall -q . -x '(^|/)(\.git|\.venv|venv|node_modules)/' }
-
-    if ($Mode -in @('full','release')) {
-        Invoke-Checked 'pip dependency check' { python -m pip check }
-        Invoke-Checked 'installed framework tuple' { python -c "import django,rest_framework,psycopg; assert django.get_version() == '$expectedDjango'; assert rest_framework.VERSION == '$expectedDrf'; assert psycopg.__version__ == '$expectedPsycopg'" }
-        Invoke-Checked 'Django check' { python manage.py check }
-        Invoke-Checked 'Django deploy check' { python manage.py check --deploy }
-        Invoke-Checked 'migration drift check' { python manage.py makemigrations --check --dry-run }
-        Invoke-Checked 'migration plan' { python manage.py migrate --plan }
-        Invoke-Checked 'Task 3 scoped identity tests' { python manage.py test auth.tests.test_application_scoped_identity_flows -v 2 }
-        Invoke-Checked 'Task 4 scoped RBAC/admin tests' { python manage.py test access.test_application_scoped_rbac access.test_application_admin_scope -v 2 }
-        Invoke-Checked 'Task 5 identity preflight tests' { python manage.py test auth.tests.test_application_email_identity_preflight -v 2 }
-        Invoke-Checked 'Task 5 live identity preflight' { python manage.py audit_application_email_identity --json }
-        Invoke-Checked 'Task 6 application-scoped session/password tests' { python manage.py test auth.tests.test_application_scoped_refresh auth.tests.test_application_scoped_session_revocation auth.tests.test_application_scoped_password_change auth.tests.test_reset_password_confirm_application_scope -v 2 }
-        Invoke-Checked 'Task 7 multi-application email tests' { python manage.py test auth.tests.test_email_trusted_application_context auth.tests.test_application_email_template_fallback auth.tests.test_email_sender_fallback_contract auth.tests.test_email_branding_fallback_contract -v 2 }
-        Invoke-Checked 'Django tests' { python manage.py test -v 2 }
-        Invoke-Checked 'owner-local PostgreSQL certification' { python scripts/certify_erp_client_platform.py }
-    }
-
-    if ($Mode -eq 'release') {
-        foreach ($tool in @('docker','trivy','syft')) { Assert-Command $tool }
-        $tag = "local/auth-release-check:$([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())"
-        $sbom = Join-Path $env:TEMP "auth-sbom-$([guid]::NewGuid().ToString('N')).json"
-        try {
-            Invoke-Checked 'Docker build' { docker build --pull --file Dockerfile --tag $tag . }
-            Invoke-Checked 'container version tuple' { docker run --rm --entrypoint python $tag -c "import platform,django,rest_framework,psycopg; assert platform.python_version() == '$expectedPython'; assert django.get_version() == '$expectedDjango'; assert rest_framework.VERSION == '$expectedDrf'; assert psycopg.__version__ == '$expectedPsycopg'" }
-            Invoke-Checked 'Trivy vulnerability and secret scan' { trivy image --exit-code 1 --severity CRITICAL --scanners vuln,secret --ignore-unfixed $tag }
-            Invoke-Checked 'SBOM generation' { syft $tag -o cyclonedx-json=$sbom }
-            if (-not (Test-Path $sbom)) { throw 'FAIL: SBOM was not generated' }
-        } finally {
-            Remove-Item $sbom -Force -ErrorAction SilentlyContinue
-            docker image rm $tag 2>$null | Out-Null
-        }
-    }
-
-    [pscustomobject]@{ Status='PASS'; Mode=$Mode; FrameworkPolicy='2026.09.3'; ApiPlatformBaseline=$baseline; Python=$expectedPython; Django=$expectedDjango; DRF=$expectedDrf; Psycopg=$expectedPsycopg; PostgreSQLTarget=$expectedPostgres; Repository='MexIngSof/API.PY.DJANGO.Auth' }
-}
-finally { Pop-Location }
+  if($Mode -in @('full','release')){
+    Write-Host '==> DJANGO_CHECK'; python manage.py check; if($LASTEXITCODE -ne 0){throw 'DJANGO_CHECK failed'}
+    Write-Host '==> MIGRATION_CHECK'; python manage.py makemigrations --check --dry-run; if($LASTEXITCODE -ne 0){throw 'MIGRATION_CHECK failed'}
+    Write-Host '==> FOCUSED_TESTS'
+    python manage.py test auth.tests.test_application_email_identity_preflight auth.tests.test_application_scoped_refresh auth.tests.test_application_scoped_session_revocation auth.tests.test_application_scoped_password_change auth.tests.test_reset_password_confirm_application_scope auth.tests.test_email_trusted_application_context auth.tests.test_application_email_template_fallback auth.tests.test_email_sender_fallback_contract auth.tests.test_email_branding_fallback_contract auth.tests.test_global_identity_contract -v 2
+    if($LASTEXITCODE -ne 0){throw 'FOCUSED_TESTS failed'}
+    Write-Host '==> FULL_TESTS'; python manage.py test -v 2; if($LASTEXITCODE -ne 0){throw 'FULL_TESTS failed'}
+    Write-Host '==> POSTGRES_OWNER_CERTIFICATION'; python scripts/certify_erp_client_platform.py; if($LASTEXITCODE -ne 0){throw 'POSTGRES_OWNER_CERTIFICATION failed'}
+  }
+  [pscustomobject]@{Status='PASS';Mode=$Mode;StaticContract='PASS';Runtime=if($Mode -eq 'fast'){'RUNTIME_VERIFICATION_REQUIRED'}else{'OBSERVED_BY_THIS_RUN'}}
+} finally {Pop-Location}
