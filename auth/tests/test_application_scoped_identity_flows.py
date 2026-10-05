@@ -102,6 +102,56 @@ class ApplicationScopedIdentityFlowTests(SimpleTestCase):
         )
         message.send.assert_called_once_with([user.email])
 
+    @patch("user.scoped_views.find_local_account")
+    @patch("user.scoped_views.resolve_application_context")
+    def test_unknown_email_reset_keeps_anti_enumeration_contract(
+        self,
+        resolve_application_context_mock,
+        find_local_account_mock,
+    ):
+        application = SimpleNamespace(ApplicationID=4, Code="REFAPART")
+        resolve_application_context_mock.return_value = application
+        find_local_account_mock.return_value = None
+        request = APIRequestFactory().post(
+            "/api/users/reset_email/",
+            {"email": "missing@example.com"},
+            format="json",
+            HTTP_X_APPLICATION_CODE="REFAPART",
+            HTTP_X_GATEWAY_INTERNAL_TOKEN="test-context",
+        )
+
+        response = ApplicationScopedUserViewSet.as_view({"post": "reset_username"})(request)
+
+        self.assertEqual(response.status_code, 204)
+        find_local_account_mock.assert_called_once_with(
+            application,
+            "missing@example.com",
+            active_only=True,
+        )
+
+    @patch("user.scoped_views.find_local_account")
+    @patch("user.scoped_views.resolve_application_context")
+    def test_unknown_resend_activation_keeps_anti_enumeration_contract(
+        self,
+        resolve_application_context_mock,
+        find_local_account_mock,
+    ):
+        application = SimpleNamespace(ApplicationID=4, Code="REFAPART")
+        resolve_application_context_mock.return_value = application
+        find_local_account_mock.return_value = None
+        request = APIRequestFactory().post(
+            "/api/users/resend_activation/",
+            {"email": "missing@example.com"},
+            format="json",
+            HTTP_X_APPLICATION_CODE="REFAPART",
+            HTTP_X_GATEWAY_INTERNAL_TOKEN="test-context",
+        )
+
+        response = ApplicationScopedUserViewSet.as_view({"post": "resend_activation"})(request)
+
+        self.assertEqual(response.status_code, 204)
+        find_local_account_mock.assert_called_once_with(application, "missing@example.com")
+
     def test_all_live_identity_mutation_routes_use_scoped_viewset(self):
         routes = (
             "/api/users/activation/",
