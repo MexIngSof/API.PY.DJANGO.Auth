@@ -1,47 +1,44 @@
-import sys
-from os import getenv, path
+import logging
+import os
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
-import dj_database_url
-import dotenv
-from django.core.management.utils import get_random_secret_key
+from django.core.exceptions import ImproperlyConfigured
+from dotenv import load_dotenv
 
-from auth.cookie_policy import resolve_cookie_policy
 from auth.email_settings import get_email_settings
 
-# ===============================
-# PROJECT INFO
-# ===============================
-PROJECT_NAME = "Auth"
 BASE_DIR = Path(__file__).resolve().parent.parent
-dotenv_file = BASE_DIR / ".env.local"
-if path.isfile(dotenv_file):
-    dotenv.load_dotenv(dotenv_file)
+load_dotenv(BASE_DIR / ".env")
+getenv = os.getenv
+logger = logging.getLogger(__name__)
 
-DB_SCHEMA = getenv("AUTH_DB_SCHEMA") or getenv("DB_SCHEMA") or PROJECT_NAME
-DB_RUNTIME_SCHEMA = getenv("AUTH_DB_RUNTIME_SCHEMA", f"{PROJECT_NAME}Runtime")
+SECRET_KEY = getenv("SECRET_KEY")
+if not SECRET_KEY:
+    raise ImproperlyConfigured("SECRET_KEY is required")
 
+DEBUG = getenv("DEBUG", "False") == "True"
 DEVELOPMENT_MODE = getenv("DEVELOPMENT_MODE", "False") == "True"
-SECRET_KEY = getenv("DJANGO_SECRET_KEY") or get_random_secret_key()
-GATEWAY_INTERNAL_SHARED_SECRET = getenv("GATEWAY_INTERNAL_SHARED_SECRET", "")
-ALLOWED_HOSTS = getenv(
-    "DJANGO_ALLOWED_HOSTS",
-    "127.0.0.1,localhost,web-frontend-node,api-backend-python",
-).split(",")
+
+ALLOWED_HOSTS = [host for host in getenv("ALLOWED_HOSTS", "").split(",") if host]
+CSRF_TRUSTED_ORIGINS = [origin for origin in getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin]
+CORS_ALLOWED_ORIGINS = [origin for origin in getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin]
+CORS_ALLOW_CREDENTIALS = True
 
 INSTALLED_APPS = [
+    "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
     "django.contrib.sessions",
+    "django.contrib.messages",
     "django.contrib.staticfiles",
-    "corsheaders",
     "rest_framework",
+    "rest_framework_simplejwt",
+    "corsheaders",
     "djoser",
-    "storages",
     "social_django",
-    "user.apps.UserConfig",
+    "user",
     "access",
-    "roles",
 ]
 
 MIDDLEWARE = [
@@ -51,6 +48,7 @@ MIDDLEWARE = [
     "django.middleware.common.CommonMiddleware",
     "django.middleware.csrf.CsrfViewMiddleware",
     "django.contrib.auth.middleware.AuthenticationMiddleware",
+    "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
 ]
 
@@ -62,61 +60,65 @@ TEMPLATES = [
         "APP_DIRS": True,
         "OPTIONS": {
             "context_processors": [
-                "django.template.context_processors.debug",
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
-            ]
+                "django.contrib.messages.context_processors.messages",
+            ],
         },
-    }
+    },
 ]
 WSGI_APPLICATION = "config.wsgi.application"
 ASGI_APPLICATION = "config.asgi.application"
 
-
-def postgres_options():
-    canonical = f'-c search_path="{DB_SCHEMA}","{DB_RUNTIME_SCHEMA}",public'
-    if "test" in sys.argv:
-        return getenv("AUTH_TEST_POSTGRES_OPTIONS", '-c search_path=public,"Auth","AuthRuntime"')
-    return getenv("AUTH_POSTGRES_OPTIONS") or getenv("POSTGRES_OPTIONS") or canonical
+AUTH_USER_MODEL = "user.UserAccount"
+GATEWAY_INTERNAL_SHARED_SECRET = getenv("GATEWAY_INTERNAL_SHARED_SECRET", "")
 
 
-def _assert_postgres_contract(config):
-    if config.get("ENGINE") != "django.db.backends.postgresql":
-        raise RuntimeError("Auth requires PostgreSQL; SQLite and other database engines are not allowed.")
-    if config.get("NAME") != config.get("USER"):
-        raise RuntimeError("Auth requires DB_USER == DB_NAME exactly.")
-    config.setdefault("OPTIONS", {})
-    config["OPTIONS"]["options"] = postgres_options()
-    return config
+def _append_search_path(options, search_path):
+    existing = options.get("options", "").strip()
+    token = f"-c search_path={search_path}"
+    if token not in existing:
+        options["options"] = f"{existing} {token}".strip()
 
 
 def build_postgres_database_config():
-    database_url = getenv("DATABASE_URL")
-    if database_url:
-        return _assert_postgres_contract(dj_database_url.parse(database_url))
-
-    db_name = getenv("AUTH_DB_NAME") or getenv("DB_NAME") or getenv("POSTGRES_DB") or "Auth"
-    db_user = getenv("AUTH_DB_USER") or getenv("DB_USER") or getenv("POSTGRES_USER") or "Auth"
-    db_password = getenv("AUTH_DB_PASSWORD") or getenv("DB_PASSWORD") or getenv("POSTGRES_PASSWORD")
-    db_host = getenv("AUTH_DB_HOST") or getenv("DB_HOST") or getenv("POSTGRES_HOST") or "localhost"
-    db_port = getenv("AUTH_DB_PORT") or getenv("DB_PORT") or getenv("POSTGRES_PORT") or "5432"
-
-    if not db_password and len(sys.argv) > 1 and sys.argv[1] != "collectstatic":
-        raise RuntimeError(
-            "Auth database password is not configured. Set AUTH_DB_PASSWORD, DB_PASSWORD or POSTGRES_PASSWORD."
-        )
-
-    return _assert_postgres_contract(
-        {
+    db_url = getenv("DATABASE_URL", "").strip()
+    if db_url:
+        parsed = urlparse(db_url)
+        if parsed.scheme not in {"postgres", "postgresql"}:
+            raise ImproperlyConfigured("DATABASE_URL must use PostgreSQL")
+        query = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        db_name = parsed.path.lstrip("/")
+        db_user = parsed.username or ""
+        if db_name != db_user:
+            raise ImproperlyConfigured("DB_USER == DB_NAME is required")
+        options = {}
+        if query.get("options"):
+            options["options"] = query["options"]
+        _append_search_path(options, '"Auth",public')
+        return {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": db_name,
             "USER": db_user,
-            "PASSWORD": db_password or "",
-            "HOST": db_host,
-            "PORT": db_port,
-            "OPTIONS": {},
+            "PASSWORD": parsed.password or "",
+            "HOST": parsed.hostname or "",
+            "PORT": str(parsed.port or "5432"),
+            "OPTIONS": options,
         }
-    )
+
+    config = {
+        "ENGINE": "django.db.backends.postgresql",
+        "NAME": getenv("AUTH_DB_NAME", "Auth"),
+        "USER": getenv("AUTH_DB_USER", "Auth"),
+        "PASSWORD": getenv("AUTH_DB_PASSWORD", ""),
+        "HOST": getenv("AUTH_DB_HOST", "localhost"),
+        "PORT": getenv("AUTH_DB_PORT", "5432"),
+        "OPTIONS": {},
+    }
+    if config.get("NAME") != config.get("USER"):
+        raise ImproperlyConfigured("DB_USER == DB_NAME is required")
+    _append_search_path(config["OPTIONS"], '"Auth",public')
+    return config
 
 
 DATABASES = {"default": build_postgres_database_config()}
@@ -153,7 +155,10 @@ DOMAIN = getenv("DOMAIN")
 SITE_NAME = getenv("SITE_NAME")
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
-    {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
+    {
+        "NAME": "django.contrib.auth.password_validation.MinimumLengthValidator",
+        "OPTIONS": {"min_length": 12},
+    },
     {"NAME": "django.contrib.auth.password_validation.CommonPasswordValidator"},
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
@@ -209,38 +214,24 @@ DJOSER = {
         "username_reset": "auth.custom_email.UsernameResetEmail",
         "username_changed_confirmation": "auth.custom_email.UsernameChangedConfirmationEmail",
     },
-    "SERIALIZERS": {
-        "user_create": "user.serializers.CustomUserCreatePasswordRetypeSerializer",
-        "user_create_password_retype": "user.serializers.CustomUserCreatePasswordRetypeSerializer",
-    },
 }
 
-_AUTH_COOKIE_POLICY = resolve_cookie_policy()
-AUTH_COOKIE = "access"
-AUTH_COOKIE_ACCESS_MAX_AGE = 60 * 15
-AUTH_COOKIE_REFRESH_MAX_AGE = 60 * 60 * 24 * 3
-AUTH_COOKIE_SECURE = _AUTH_COOKIE_POLICY.secure
-AUTH_COOKIE_HTTP_ONLY = True
-AUTH_COOKIE_PATH = "/"
-AUTH_COOKIE_SAMESITE = _AUTH_COOKIE_POLICY.same_site
-AUTH_COOKIE_DOMAIN = _AUTH_COOKIE_POLICY.domain
+SIMPLE_JWT = {
+    "AUTH_HEADER_TYPES": ("Bearer",),
+    "ACCESS_TOKEN_LIFETIME": __import__("datetime").timedelta(minutes=15),
+    "REFRESH_TOKEN_LIFETIME": __import__("datetime").timedelta(days=7),
+    "ROTATE_REFRESH_TOKENS": True,
+    "BLACKLIST_AFTER_ROTATION": True,
+}
 
-SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = getenv("GOOGLE_AUTH_KEY")
-SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = getenv("GOOGLE_AUTH_SECRET_KEY")
-SOCIAL_AUTH_GOOGLE_OAUTH2_SCOPE = [
-    "https://www.googleapis.com/auth/userinfo.email",
-    "https://www.googleapis.com/auth/userinfo.profile",
-]
-SOCIAL_AUTH_GOOGLE_OAUTH2_EXTRA_DATA = ["first_name", "last_name"]
-SOCIAL_AUTH_FACEBOOK_KEY = getenv("FACEBOOK_AUTH_KEY")
-SOCIAL_AUTH_FACEBOOK_SECRET = getenv("FACEBOOK_AUTH_SECRET_KEY")
-SOCIAL_AUTH_FACEBOOK_SCOPE = ["email"]
-SOCIAL_AUTH_FACEBOOK_PROFILE_EXTRA_PARAMS = {"fields": "email, first_name, last_name"}
+SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = getenv("SOCIAL_AUTH_GOOGLE_OAUTH2_KEY", "")
+SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = getenv("SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET", "")
+SOCIAL_AUTH_FACEBOOK_KEY = getenv("SOCIAL_AUTH_FACEBOOK_KEY", "")
+SOCIAL_AUTH_FACEBOOK_SECRET = getenv("SOCIAL_AUTH_FACEBOOK_SECRET", "")
 
-CORS_ALLOWED_ORIGINS = getenv(
-    "CORS_ALLOWED_ORIGINS",
-    "http://localhost:3000,http://127.0.0.1:3000",
-).split(",")
-CORS_ALLOW_CREDENTIALS = True
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-AUTH_USER_MODEL = "user.UserAccount"
+LOGGING = {
+    "version": 1,
+    "disable_existing_loggers": False,
+    "handlers": {"console": {"class": "logging.StreamHandler"}},
+    "root": {"handlers": ["console"], "level": "INFO"},
+}
