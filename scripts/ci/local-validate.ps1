@@ -31,17 +31,21 @@ try {
         if ($Text -notmatch $Pattern) { throw $Failure }
     }
 
-    foreach ($file in @('manage.py','requirements.txt','service-metadata.yml','Dockerfile','config/settings.py','config/asgi.py','config/observability.py','auth_health.py','config/urls.py','.env.local.example','scripts/certify_erp_client_platform.py','contracts/transversal-api.yml')) {
+    foreach ($file in @(
+        'manage.py','requirements.txt','service-metadata.yml','Dockerfile','config/settings.py','config/asgi.py','config/observability.py',
+        'auth_health.py','config/urls.py','.env.local.example','scripts/certify_erp_client_platform.py','contracts/transversal-api.yml',
+        'user/application_scope.py','auth/tests/test_trusted_application_context.py'
+    )) {
         if (-not (Test-Path -LiteralPath $file)) { throw "FAIL: missing required file $file" }
     }
 
     $metadata = Get-Content service-metadata.yml -Raw
-$transversalContract = Get-Content contracts/transversal-api.yml -Raw
+    $transversalContract = Get-Content contracts/transversal-api.yml -Raw
     foreach ($token in @('contract: transversal_http','health: /health/','readiness: /ready/','request_id_header: X-Request-ID','correlation_id_header: X-Correlation-ID','BUSINESS_TRAFFIC_GATEWAY_ONLY')) {
         if ($transversalContract -notmatch [regex]::Escape($token)) { throw "FAIL: transversal API contract token missing: $token" }
     }
 
-        foreach ($pattern in @(
+    foreach ($pattern in @(
         'framework_policy_version:\s*["'']2026\.09\.3["'']',
         'api_platform_baseline:\s*["'']django-api-2026\.09["'']',
         'api_platform_adoption_state:\s*CANDIDATE',
@@ -83,9 +87,16 @@ $transversalContract = Get-Content contracts/transversal-api.yml -Raw
     if ($settings -notmatch 'django\.db\.backends\.postgresql') { throw 'FAIL: PostgreSQL must be explicit' }
     if ($settings -notmatch 'search_path=.*public') { throw 'FAIL: PostgreSQL search_path must include public' }
     if ($settings -notmatch 'DB_USER == DB_NAME' -and $settings -notmatch 'config\.get\("NAME"\) != config\.get\("USER"\)') { throw 'FAIL: DB_USER == DB_NAME enforcement is missing' }
+    if ($settings -notmatch 'GATEWAY_INTERNAL_SHARED_SECRET\s*=\s*getenv\("GATEWAY_INTERNAL_SHARED_SECRET"') { throw 'FAIL: Auth trusted Gateway secret setting is missing' }
+
+    $applicationScope = Get-Content user/application_scope.py -Raw
+    foreach ($token in @('X-Application-Code','X-Gateway-Internal-Token','APPLICATION_CONTEXT_MISMATCH','GATEWAY_CONTEXT_REQUIRED','APPLICATION_CODE_REQUIRED')) {
+        if ($applicationScope -notmatch [regex]::Escape($token)) { throw "FAIL: trusted application scope contract missing: $token" }
+    }
 
     $envText = Get-Content '.env.local.example' -Raw
     if ($envText -notmatch '(?m)^AUTH_DB_NAME=Auth\s*$' -or $envText -notmatch '(?m)^AUTH_DB_USER=Auth\s*$') { throw 'FAIL: canonical Auth DB identity is missing' }
+    if ($envText -notmatch '(?m)^GATEWAY_INTERNAL_SHARED_SECRET=\s*$') { throw 'FAIL: trusted Gateway secret env contract is missing' }
     if ($envText -match '(?im)^\w*(DB_USER|POSTGRES_USER)=.*_user\s*$') { throw 'FAIL: legacy *_user database alias detected' }
     if ($envText -match '(?i)(change-me|replace-me|replace_with_|dev-[a-z0-9-]*secret|local-[a-z0-9-]*secret)') { throw 'FAIL: predictable placeholder secret detected' }
 
