@@ -19,23 +19,15 @@ from roles.models import Roles, UserRoles
 class ApplicationScopedRbacTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
+        self.application = Applications.objects.create(Code="REFAPART", Name="RefaPart", IsActive=True)
+        self.other_application = Applications.objects.create(Code="JOBCRON", Name="JobCron", IsActive=True)
         self.user = get_user_model().objects.create_user(
             email="rbac@example.com",
             password="test-password",
-        )
-        self.application = Applications.objects.create(
-            Code="REFAPART",
-            Name="RefaPart",
-            IsActive=True,
-        )
-        self.other_application = Applications.objects.create(
-            Code="JOBCRON",
-            Name="JobCron",
-            IsActive=True,
+            idApp=self.application.ApplicationID,
         )
         self.role = Roles.objects.create(Name="GLOBAL_ROLE")
         UserRoles.objects.create(UserID=self.user, RoleID=self.role)
-
         self.module = Modules.objects.create(Code="AUTH", Name="Auth")
         self.action = Actions.objects.create(Name="READ")
         self.permission = Permissions.objects.create(
@@ -75,10 +67,7 @@ class ApplicationScopedRbacTests(TestCase):
 
     def test_role_and_permission_are_returned_only_when_both_are_mapped_to_application(self):
         ApplicationRoles.objects.create(ApplicationID=self.application, RoleID=self.role)
-        ApplicationPermissions.objects.create(
-            ApplicationID=self.application,
-            PermissionID=self.permission,
-        )
+        ApplicationPermissions.objects.create(ApplicationID=self.application, PermissionID=self.permission)
         response = self._response("REFAPART")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["roles"]), 1)
@@ -86,10 +75,7 @@ class ApplicationScopedRbacTests(TestCase):
 
     def test_mapping_in_other_application_does_not_authorize_current_application(self):
         ApplicationRoles.objects.create(ApplicationID=self.other_application, RoleID=self.role)
-        ApplicationPermissions.objects.create(
-            ApplicationID=self.other_application,
-            PermissionID=self.permission,
-        )
+        ApplicationPermissions.objects.create(ApplicationID=self.other_application, PermissionID=self.permission)
         response = self._response("REFAPART")
         self.assertEqual(response.status_code, 200)
         self.assertEqual(response.data["roles"], [])
