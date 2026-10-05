@@ -1,9 +1,53 @@
 from djoser.serializers import UserCreatePasswordRetypeSerializer
 from rest_framework import serializers
+from rest_framework.exceptions import AuthenticationFailed
+from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 
-from access.models import Applications, PasswordHistory
+from access.models import ApplicationRoles, PasswordHistory
 from roles.models import Roles, UserRoles
+from user.account_scope import find_local_account, normalize_email
+from user.application_scope import resolve_application_context
 from user.models import UserAccount
+
+
+REGISTRATION_ROLE_BY_APPLICATION = {
+    "LEXNOVA": "CLIENT_BASE",
+    "REFAPART": "CUSTOMER",
+}
+
+
+class ApplicationScopedTokenObtainPairSerializer(TokenObtainPairSerializer):
+    def validate(self, attrs):
+        request = self.context.get("request")
+        if request is None:
+            raise AuthenticationFailed(
+                "Application context is required.",
+                code="APPLICATION_CODE_REQUIRED",
+            )
+
+        application = resolve_application_context(request)
+        email = normalize_email(attrs.get("email"))
+        password = attrs.get("password") or ""
+        user = find_local_account(application, email)
+
+        if (
+            user is None
+            or not getattr(user, "is_active", False)
+            or not user.check_password(password)
+        ):
+            raise AuthenticationFailed(
+                "No active account found with the given credentials.",
+                code="no_active_account",
+            )
+
+        self.user = user
+        refresh = self.get_token(user)
+        refresh["application_id"] = int(application.ApplicationID)
+        refresh["application_code"] = application.Code
+        return {
+            "refresh": str(refresh),
+            "access": str(refresh.access_token),
+        }
 
 
 class CustomUserCreatePasswordRetypeSerializer(UserCreatePasswordRetypeSerializer):
@@ -21,58 +65,43 @@ class CustomUserCreatePasswordRetypeSerializer(UserCreatePasswordRetypeSerialize
             "ApplicationCode",
         )
 
-    def validate_role(self, value):
-        if not value:
-            return value
-        if not Roles.objects.filter(Name=value).exists():
-            raise serializers.ValidationError("Role does not exist.")
-        return value
-
-    def validate_ApplicationCode(self, value):
-        application_code = (value or "").strip().upper()
-        if application_code and not Applications.objects.filter(
-            Code=application_code,
-            IsActive=True,
-        ).exists():
-            raise serializers.ValidationError("ApplicationCode does not exist or is inactive.")
-        return application_code
-
     def validate(self, attrs):
-        role = attrs.pop("role", None)
-        application_code = attrs.pop("ApplicationCode", "")
         request = self.context.get("request")
-        if not application_code and request is not None:
-            application_code = (
-                request.headers.get("X-Application-Code")
-                or request.data.get("application_code")
-                or request.query_params.get("application_code")
-                or ""
+        if request is None:
+            raise serializers.ValidationError(
+                {"detail": "Application context is required."}
             )
 
-        if application_code:
-            application = Applications.objects.filter(
-                Code=application_code.strip().upper(),
-                IsActive=True,
-            ).first()
-            if application is not None and not attrs.get("idApp"):
-                attrs["idApp"] = application.ApplicationID
+        application = resolve_application_context(request)
+        role_name = REGISTRATION_ROLE_BY_APPLICATION.get(application.Code)
+        if not role_name:
+            raise serializers.ValidationError(
+                {"detail": "Registration is not enabled for this application."}
+            )
 
-        if application_code.strip().upper() == "LEXNOVA":
-            role = "CLIENT_BASE"
-        elif application_code.strip().upper() == "REFAPART":
-            role = "CUSTOMER"
-        elif not role:
-            raise serializers.ValidationError({"role": "This field is required."})
+        role_obj = Roles.objects.filter(Name=role_name).first()
+        if role_obj is None or not ApplicationRoles.objects.filter(
+            ApplicationID=application,
+            RoleID=role_obj,
+        ).exists():
+            raise serializers.ValidationError(
+                {"detail": "Registration role is not configured for this application."}
+            )
+
+        # Client-provided application/role fields are compatibility inputs only.
+        # The trusted Gateway context is authoritative.
+        attrs["idApp"] = application.ApplicationID
+        attrs.pop("role", None)
+        attrs.pop("ApplicationCode", None)
 
         attrs = super().validate(attrs)
-        attrs["role"] = role
-        attrs["ApplicationCode"] = application_code
+        attrs["role"] = role_name
         return attrs
 
     def create(self, validated_data):
         validated_data.pop("re_password", None)
         role_name = validated_data.pop("role")
-        validated_data.pop("ApplicationCode", "")
+        validated_data.pop("ApplicationCode", None)
 
         user = super().create(validated_data)
         role_obj = Roles.objects.get(Name=role_name)
