@@ -2,6 +2,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from access.mobile_session_views import MobileOwnUserSessionViewSet
+from access.scoped_rbac_views import ApplicationScopedMePermissionsViewSet
 from access.views import (
     AccessAuditEventViewSet,
     ActionViewSet,
@@ -10,7 +11,6 @@ from access.views import (
     ApplicationViewSet,
     IdentityUserViewSet,
     LoginAttemptViewSet,
-    MePermissionsViewSet,
     MfaMethodViewSet,
     ModuleViewSet,
     PasswordHistoryViewSet,
@@ -56,7 +56,7 @@ router.register("mfa-methods", MfaMethodViewSet, basename="mfa-methods")
 router.register("recovery-codes", RecoveryCodeViewSet, basename="recovery-codes")
 router.register("audit-events", AccessAuditEventViewSet, basename="audit-events")
 
-me_permissions = MePermissionsViewSet.as_view({"get": "list_permissions"})
+me_permissions = ApplicationScopedMePermissionsViewSet.as_view({"get": "list_permissions"})
 
 urlpatterns = [
     path("", include(router.urls)),
