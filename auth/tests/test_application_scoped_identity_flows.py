@@ -10,6 +10,8 @@ from user.models import UserAccount
 from user.scoped_views import ApplicationScopedUserViewSet
 
 
+# Task 3 source coverage. These tests must be executed by the Auth owner
+# executor before Task 3 can advance beyond SOURCE_IMPLEMENTED_PENDING_OWNER_VALIDATION.
 @override_settings(GATEWAY_INTERNAL_SHARED_SECRET="test-context")
 class ApplicationScopedIdentityFlowTests(SimpleTestCase):
     def test_normalize_email_is_case_insensitive_and_trimmed(self):
