@@ -115,6 +115,11 @@ try {
     $health = Get-Content auth_health.py -Raw
     if ($urls -notmatch 'path\("health/"' -or $urls -notmatch 'path\("ready/"') { throw 'FAIL: health/readiness routes are required' }
     if ($urls -notmatch 'ApplicationScopedUserViewSet') { throw 'FAIL: public identity routes are not application scoped' }
+    foreach ($route in @('activation/','resend_activation/','reset_password/','reset_password_confirm/','set_email/','reset_email/','reset_email_confirm/')) {
+        if ($urls -notmatch [regex]::Escape($route)) { throw "FAIL: scoped identity route missing: $route" }
+    }
+    $userModel = Get-Content user/models.py -Raw
+    if ($userModel -notmatch 'email\s*=\s*models\.EmailField\([^\r\n]*unique=True') { throw 'FAIL: Task 3 must preserve global email uniqueness until the Task 5 migration' }
     if ($health -notmatch 'connection\.ensure_connection\(\)' -or $health -notmatch 'status=503') { throw 'FAIL: readiness must verify database connectivity' }
 
     $asgi = Get-Content config/asgi.py -Raw
