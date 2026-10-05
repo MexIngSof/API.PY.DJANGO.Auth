@@ -152,6 +152,64 @@ class ApplicationScopedIdentityFlowTests(SimpleTestCase):
         self.assertEqual(response.status_code, 204)
         find_local_account_mock.assert_called_once_with(application, "missing@example.com")
 
+    @patch("user.scoped_views.account_belongs_to_application", return_value=False)
+    @patch("user.scoped_views.resolve_application_context")
+    def test_password_reset_confirm_rejects_cross_application_account(
+        self,
+        resolve_application_context_mock,
+        _belongs_mock,
+    ):
+        application = SimpleNamespace(ApplicationID=4, Code="REFAPART")
+        foreign_user = SimpleNamespace(id=17, idApp=9)
+        resolve_application_context_mock.return_value = application
+        request = APIRequestFactory().post(
+            "/api/users/reset_password_confirm/",
+            {"uid": "encoded", "token": "token", "new_password": "Secret123!"},
+            format="json",
+            HTTP_X_APPLICATION_CODE="REFAPART",
+            HTTP_X_GATEWAY_INTERNAL_TOKEN="test-context",
+        )
+        view = ApplicationScopedUserViewSet.as_view({"post": "reset_password_confirm"})
+
+        with patch.object(ApplicationScopedUserViewSet, "get_serializer") as get_serializer:
+            serializer = Mock()
+            serializer.user = foreign_user
+            serializer.data = {"new_password": "Secret123!"}
+            get_serializer.return_value = serializer
+            response = view(request)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["code"], "APPLICATION_ACCESS_DENIED")
+
+    @patch("user.scoped_views.account_belongs_to_application", return_value=False)
+    @patch("user.scoped_views.resolve_application_context")
+    def test_email_reset_confirm_rejects_cross_application_account(
+        self,
+        resolve_application_context_mock,
+        _belongs_mock,
+    ):
+        application = SimpleNamespace(ApplicationID=4, Code="REFAPART")
+        foreign_user = SimpleNamespace(id=17, idApp=9)
+        resolve_application_context_mock.return_value = application
+        request = APIRequestFactory().post(
+            "/api/users/reset_email_confirm/",
+            {"uid": "encoded", "token": "token", "new_email": "new@example.com"},
+            format="json",
+            HTTP_X_APPLICATION_CODE="REFAPART",
+            HTTP_X_GATEWAY_INTERNAL_TOKEN="test-context",
+        )
+        view = ApplicationScopedUserViewSet.as_view({"post": "reset_username_confirm"})
+
+        with patch.object(ApplicationScopedUserViewSet, "get_serializer") as get_serializer:
+            serializer = Mock()
+            serializer.user = foreign_user
+            serializer.data = {"new_email": "new@example.com"}
+            get_serializer.return_value = serializer
+            response = view(request)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.data["code"], "APPLICATION_ACCESS_DENIED")
+
     def test_all_live_identity_mutation_routes_use_scoped_viewset(self):
         routes = (
             "/api/users/activation/",
