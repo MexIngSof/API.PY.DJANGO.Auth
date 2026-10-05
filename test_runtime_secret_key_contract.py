@@ -19,6 +19,16 @@ class RuntimeSecretKeyContractTests(unittest.TestCase):
         expression = ast.Expression(assignment.value)
         return eval(compile(expression, str(SETTINGS), "eval"), {"getenv": values.get})
 
+    def test_roles_app_is_registered_for_auth_access_models(self):
+        tree = ast.parse(SETTINGS.read_text(encoding="utf-8"))
+        assignment = next(
+            node
+            for node in tree.body
+            if isinstance(node, ast.Assign)
+            and any(isinstance(target, ast.Name) and target.id == "INSTALLED_APPS" for target in node.targets)
+        )
+        apps = ast.literal_eval(assignment.value)
+        self.assertIn("roles", apps)
     def test_docker_runtime_django_secret_key_is_accepted(self):
         self.assertEqual(
             self._evaluate_secret_key_assignment({"DJANGO_SECRET_KEY": "synthetic-runtime-key"}),
