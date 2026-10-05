@@ -6,6 +6,7 @@ from django.urls import resolve
 from rest_framework.test import APIRequestFactory
 
 from user.account_scope import find_local_account, normalize_email
+from user.models import UserAccount
 from user.scoped_views import ApplicationScopedUserViewSet
 
 
@@ -13,6 +14,9 @@ from user.scoped_views import ApplicationScopedUserViewSet
 class ApplicationScopedIdentityFlowTests(SimpleTestCase):
     def test_normalize_email_is_case_insensitive_and_trimmed(self):
         self.assertEqual(normalize_email("  USER@Example.COM  "), "user@example.com")
+
+    def test_task3_preserves_global_email_unique_until_identity_migration(self):
+        self.assertTrue(UserAccount._meta.get_field("email").unique)
 
     @patch("user.account_scope.get_user_model")
     def test_account_lookup_uses_application_and_normalized_email(self, get_user_model_mock):
