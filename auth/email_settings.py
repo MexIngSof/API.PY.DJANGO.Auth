@@ -77,7 +77,8 @@ def get_email_settings(
     1. Project-specific variables.
     2. Shared AUTH variables.
     3. Legacy AWS_SES variables for compatibility.
-    4. Safe console fallback only in development.
+    4. Explicit AUTH_NOTIFICATION_FROM_EMAIL compatibility fallback.
+    5. Empty sender in development when no sender is configured.
     """
 
     normalized_project_code = (project_code or "AUTH").strip().upper()
@@ -102,8 +103,8 @@ def get_email_settings(
         provider_source = "derived"
 
     if not from_email:
-        from_email = _env("AUTH_NOTIFICATION_FROM_EMAIL") or "cash.1dip1@gmail.com"
-        from_source = "AUTH_NOTIFICATION_FROM_EMAIL"
+        from_email = _env("AUTH_NOTIFICATION_FROM_EMAIL")
+        from_source = "AUTH_NOTIFICATION_FROM_EMAIL" if from_email else "unconfigured"
 
     is_ses = provider.lower() == "ses"
     is_complete = bool(access_key_id and secret_access_key and region_name and from_email) if is_ses else True
