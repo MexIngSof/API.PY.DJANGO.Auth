@@ -7,14 +7,24 @@ from auth.email_settings import get_email_settings
 
 
 class ProjectEmailSettingsTests(SimpleTestCase):
-    def test_development_uses_console_fallback_without_ses(self):
+    def test_development_uses_console_without_inventing_sender(self):
         with patch.dict("os.environ", {}, clear=True):
             settings = get_email_settings("REFAPART", development_mode=True)
 
         self.assertEqual(settings.project_code, "REFAPART")
         self.assertEqual(settings.provider, "console")
-        self.assertEqual(settings.from_email, "cash.1dip1@gmail.com")
+        self.assertEqual(settings.from_email, "")
         self.assertTrue(settings.is_complete)
+
+    def test_development_uses_explicit_notification_sender_fallback(self):
+        with patch.dict(
+            "os.environ",
+            {"AUTH_NOTIFICATION_FROM_EMAIL": "auth@example.test"},
+            clear=True,
+        ):
+            settings = get_email_settings("REFAPART", development_mode=True)
+
+        self.assertEqual(settings.from_email, "auth@example.test")
 
     def test_project_settings_override_shared_auth_settings(self):
         env = {
