@@ -1,5 +1,6 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
+from rest_framework.exceptions import NotFound, PermissionDenied
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from access.application_admin_scope import resolve_admin_target_application
@@ -16,11 +17,13 @@ class ApplicationAdminScopeTests(TestCase):
         self.delegated = User.objects.create_user(
             email="delegated@example.com",
             password="test-password",
+            idApp=self.refapart.ApplicationID,
             is_staff=True,
         )
         self.global_admin = User.objects.create_superuser(
             email="global@example.com",
             password="test-password",
+            idApp=self.refapart.ApplicationID,
         )
 
     def _request(self, user, target=None):
@@ -43,7 +46,7 @@ class ApplicationAdminScopeTests(TestCase):
         self.assertEqual(target.ApplicationID, self.refapart.ApplicationID)
 
     def test_delegated_admin_cannot_target_another_application(self):
-        with self.assertRaisesMessage(Exception, "Delegated administrators"):
+        with self.assertRaisesMessage(PermissionDenied, "Delegated administrators"):
             resolve_admin_target_application(self._request(self.delegated, "JOBCRON"))
 
     def test_superadmin_may_target_another_registered_application(self):
@@ -51,5 +54,5 @@ class ApplicationAdminScopeTests(TestCase):
         self.assertEqual(target.ApplicationID, self.jobcron.ApplicationID)
 
     def test_superadmin_cannot_target_unknown_application(self):
-        with self.assertRaisesMessage(Exception, "not registered or active"):
+        with self.assertRaisesMessage(NotFound, "not registered or active"):
             resolve_admin_target_application(self._request(self.global_admin, "UNKNOWN"))
