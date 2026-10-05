@@ -36,9 +36,12 @@ class ApplicationEmailIdentityPreflightTests(TestCase):
         with self.assertRaises(CommandError):
             call_command("audit_application_email_identity", stdout=StringIO())
 
-    def test_same_normalized_email_in_different_applications_is_not_duplicate(self):
+    def test_same_normalized_email_in_different_apps_is_not_duplicate_group(self):
         other = Applications.objects.create(Code="JOBCRON", Name="JobCron", IsActive=True)
         self._create_raw_user("user@example.com", self.application.ApplicationID)
         self._create_raw_user("USER@example.com", other.ApplicationID)
+        output = StringIO()
         with self.assertRaises(CommandError):
-            call_command("audit_application_email_identity", stdout=StringIO())
+            call_command("audit_application_email_identity", "--json", stdout=output)
+        self.assertIn('"duplicate_application_email_groups": []', output.getvalue())
+        self.assertIn('"non_normalized_user_ids":', output.getvalue())
