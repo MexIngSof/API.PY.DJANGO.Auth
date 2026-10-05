@@ -13,7 +13,7 @@ load_dotenv(BASE_DIR / ".env")
 getenv = os.getenv
 logger = logging.getLogger(__name__)
 
-SECRET_KEY = getenv("SECRET_KEY")
+SECRET_KEY = (getenv("DJANGO_SECRET_KEY") or getenv("SECRET_KEY") or "").strip()
 if not SECRET_KEY:
     raise ImproperlyConfigured("SECRET_KEY is required")
 
