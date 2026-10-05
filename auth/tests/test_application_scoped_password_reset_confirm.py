@@ -1,6 +1,8 @@
 from unittest.mock import Mock, patch
 
 from django.test import TestCase, override_settings
+from rest_framework.parsers import JSONParser
+from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
 from access.models import Applications
@@ -12,8 +14,12 @@ from user.views import CustomUserViewSet
 class ApplicationScopedPasswordResetConfirmTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.refapart = Applications.objects.create(Code="REFAPART", Name="RefaPart", IsActive=True)
-        self.jobcron = Applications.objects.create(Code="JOBCRON", Name="JobCron", IsActive=True)
+        self.refapart, _ = Applications.objects.get_or_create(
+            Code="REFAPART", defaults={"Name": "RefaPart", "IsActive": True}
+        )
+        self.jobcron, _ = Applications.objects.get_or_create(
+            Code="JOBCRON", defaults={"Name": "JobCron", "IsActive": True}
+        )
         self.user = UserAccount.objects.create_user(
             email="reset@example.com",
             password="old-password-123!",
@@ -23,12 +29,15 @@ class ApplicationScopedPasswordResetConfirmTests(TestCase):
         )
 
     def _request(self, application_code):
-        return self.factory.post(
-            "/api/auth/users/reset_password_confirm/",
-            {"uid": "unused", "token": "unused", "new_password": "new-password-456!"},
-            format="json",
-            HTTP_X_APPLICATION_CODE=application_code,
-            HTTP_X_GATEWAY_INTERNAL_TOKEN="test-gateway-secret",
+        return Request(
+            self.factory.post(
+                "/api/auth/users/reset_password_confirm/",
+                {"uid": "unused", "token": "unused", "new_password": "new-password-456!"},
+                format="json",
+                HTTP_X_APPLICATION_CODE=application_code,
+                HTTP_X_GATEWAY_INTERNAL_TOKEN="test-gateway-secret",
+            ),
+            parsers=[JSONParser()],
         )
 
     def _view_with_valid_serializer(self, request):

@@ -12,8 +12,12 @@ from user.mobile_session_views import CustomTokenRefreshView
 class ApplicationScopedRefreshTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.refapart = Applications.objects.create(Code="REFAPART", Name="RefaPart", IsActive=True)
-        self.jobcron = Applications.objects.create(Code="JOBCRON", Name="JobCron", IsActive=True)
+        self.refapart, _ = Applications.objects.get_or_create(
+            Code="REFAPART", defaults={"Name": "RefaPart", "IsActive": True}
+        )
+        self.jobcron, _ = Applications.objects.get_or_create(
+            Code="JOBCRON", defaults={"Name": "JobCron", "IsActive": True}
+        )
 
     def _refresh(self, token, application_code):
         request = self.factory.post(

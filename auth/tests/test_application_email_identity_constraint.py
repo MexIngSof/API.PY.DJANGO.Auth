@@ -8,12 +8,16 @@ from access.models import Applications
 class ApplicationEmailIdentityConstraintTests(TestCase):
     def setUp(self):
         self.User = get_user_model()
-        self.refapart = Applications.objects.create(Code="REFAPART", Name="RefaPart", IsActive=True)
-        self.jobcron = Applications.objects.create(Code="JOBCRON", Name="JobCron", IsActive=True)
+        self.refapart, _ = Applications.objects.get_or_create(
+            Code="REFAPART", defaults={"Name": "RefaPart", "IsActive": True}
+        )
+        self.jobcron, _ = Applications.objects.get_or_create(
+            Code="JOBCRON", defaults={"Name": "JobCron", "IsActive": True}
+        )
 
     def _create_raw_user(self, email, application):
         user = self.User(
-            email=email,
+            email=email.strip().lower(),
             idApp=application.ApplicationID,
             first_name="Test",
             last_name="User",

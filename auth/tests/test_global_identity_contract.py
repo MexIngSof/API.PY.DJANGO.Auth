@@ -8,8 +8,12 @@ from user.models import UserAccount
 
 class GlobalIdentityContractTests(TestCase):
     def setUp(self):
-        self.refapart = Applications.objects.create(Code="REFAPART", Name="RefaPart", IsActive=True)
-        self.jobcron = Applications.objects.create(Code="JOBCRON", Name="JobCron", IsActive=True)
+        self.refapart, _ = Applications.objects.get_or_create(
+            Code="REFAPART", defaults={"Name": "RefaPart", "IsActive": True}
+        )
+        self.jobcron, _ = Applications.objects.get_or_create(
+            Code="JOBCRON", defaults={"Name": "JobCron", "IsActive": True}
+        )
         self.refapart_user = UserAccount.objects.create_user(
             email="user@example.com",
             password="refapart-password",

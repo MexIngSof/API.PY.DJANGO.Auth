@@ -15,10 +15,7 @@ class EmailUserApplicationConsistencyTests(SimpleTestCase):
         trusted_application = SimpleNamespace(ApplicationID=10, Code="REFAPART")
         user = SimpleNamespace(idApp=20)
 
-        with patch("auth.custom_email.get_application_code", return_value="REFAPART"), patch(
-            "access.models.Applications.objects.filter"
-        ) as applications_filter:
-            applications_filter.return_value.first.return_value = trusted_application
+        with patch("auth.custom_email.resolve_application_context", return_value=trusted_application):
             with self.assertRaises(AuthenticationFailed) as context:
                 email.resolve_email_metadata({"user": user, "language_code": "es-MX"})
 

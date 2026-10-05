@@ -1,8 +1,10 @@
 from types import SimpleNamespace
 
+from django.template import TemplateDoesNotExist
 from django.template.loader import get_template
 from django.test import RequestFactory
 from django.test import SimpleTestCase
+from unittest.mock import patch
 
 from auth.custom_email import (
     ACTION_ACTIVATION,
@@ -189,7 +191,8 @@ class RefaPartEmailTemplateSourceTests(SimpleTestCase):
             )
         )
 
-    def test_db_template_is_only_fallback_when_file_template_is_missing(self):
+    @patch("auth.custom_email.get_template", side_effect=TemplateDoesNotExist("missing"))
+    def test_db_template_is_only_fallback_when_file_template_is_missing(self, _get_template):
         email = self.make_activation_email()
         application = SimpleNamespace(Code="APP_WITHOUT_FILE")
         db_template = SimpleNamespace(

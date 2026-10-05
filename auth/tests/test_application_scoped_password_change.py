@@ -10,8 +10,12 @@ from user.views import RequiredPasswordChangeView
 class ApplicationScopedPasswordChangeTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.refapart = Applications.objects.create(Code="REFAPART", Name="RefaPart", IsActive=True)
-        self.jobcron = Applications.objects.create(Code="JOBCRON", Name="JobCron", IsActive=True)
+        self.refapart, _ = Applications.objects.get_or_create(
+            Code="REFAPART", defaults={"Name": "RefaPart", "IsActive": True}
+        )
+        self.jobcron, _ = Applications.objects.get_or_create(
+            Code="JOBCRON", defaults={"Name": "JobCron", "IsActive": True}
+        )
         self.user = UserAccount.objects.create_user(
             email="user@example.com",
             password="old-password-123!",

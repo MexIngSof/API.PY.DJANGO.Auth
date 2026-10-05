@@ -1,4 +1,4 @@
-from django.test import TestCase
+from django.test import TestCase, override_settings
 from django.utils import timezone
 from rest_framework.test import APIClient
 
@@ -6,6 +6,7 @@ from access.models import Applications, RefreshTokens, UserSessions
 from user.models import UserAccount
 
 
+@override_settings(GATEWAY_INTERNAL_SHARED_SECRET="mobile-test-gateway")
 class MobileSessionContractTests(TestCase):
     def setUp(self):
         self.application = Applications.objects.create(
@@ -24,6 +25,7 @@ class MobileSessionContractTests(TestCase):
         self.user.is_active = True
         self.user.save(update_fields=["is_active"])
         self.client = APIClient()
+        self.client.credentials(HTTP_X_GATEWAY_INTERNAL_TOKEN="mobile-test-gateway")
 
     def login(self, fingerprint="android-mobile-test-device"):
         return self.client.post(

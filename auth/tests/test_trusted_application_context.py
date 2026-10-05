@@ -3,6 +3,8 @@ from unittest.mock import patch
 
 from django.test import SimpleTestCase, override_settings
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.parsers import JSONParser
+from rest_framework.request import Request
 from rest_framework.test import APIRequestFactory
 
 from user.application_scope import resolve_application_context
@@ -13,13 +15,21 @@ class TrustedApplicationContextTests(SimpleTestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
 
-    def request(self, application_code="REFAPART", body=None, token="gateway-secret"):
+    def request(self, application_code="REFAPART", body=None, token="gateway-secret", query=None):
         headers = {}
         if application_code is not None:
             headers["HTTP_X_APPLICATION_CODE"] = application_code
         if token is not None:
             headers["HTTP_X_GATEWAY_INTERNAL_TOKEN"] = token
-        return self.factory.post("/api/auth/jwt/create/", body or {}, format="json", **headers)
+        from urllib.parse import urlencode
+
+        query_string = "?" + urlencode(query) if query else ""
+        return Request(
+            self.factory.post(
+                f"/api/auth/jwt/create/{query_string}", body or {}, format="json", **headers
+            ),
+            parsers=[JSONParser()],
+        )
 
     @patch("user.application_scope.Applications.objects.filter")
     def test_trusted_gateway_context_resolves_active_application(self, filter_mock):
@@ -51,6 +61,18 @@ class TrustedApplicationContextTests(SimpleTestCase):
             resolve_application_context(self.request("UNKNOWN"))
 
         self.assertEqual(context.exception.get_codes(), "APPLICATION_NOT_REGISTERED")
+
+    @patch("user.application_scope.Applications.objects.filter")
+    def test_conflicting_query_application_code_is_rejected_for_client_context(self, filter_mock):
+        filter_mock.return_value.only.return_value.first.return_value = SimpleNamespace(
+            ApplicationID=4,
+            Code="REFAPART",
+        )
+
+        with self.assertRaises(AuthenticationFailed) as context:
+            resolve_application_context(self.request(query={"application_code": "JOBCRON"}))
+
+        self.assertEqual(context.exception.get_codes(), "APPLICATION_CONTEXT_MISMATCH")
 
     @patch("user.application_scope.Applications.objects.filter")
     def test_conflicting_body_application_code_is_rejected(self, filter_mock):

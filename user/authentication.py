@@ -1,10 +1,11 @@
 from django.conf import settings
 from rest_framework.exceptions import AuthenticationFailed
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.request import Request
 from rest_framework_simplejwt.authentication import JWTAuthentication
 
 from access.models import UserSessions
-from user.application_scope import resolve_application_context
+from user.application_scope import resolve_application_context, trusted_target_query_keys_for_request
 
 
 class CustomJWTAuthentication(JWTAuthentication):
@@ -19,6 +20,9 @@ class CustomJWTAuthentication(JWTAuthentication):
         # Empty credentials mean unauthenticated, not an invalid JWT.
         if not raw_token:
             return None
+
+        if header is None:
+            SessionAuthentication().enforce_csrf(request)
 
         validated_token = self.get_validated_token(raw_token)
         user = self.get_user(validated_token)
@@ -40,7 +44,10 @@ class CustomJWTAuthentication(JWTAuthentication):
                     code="SESSION_REVOKED",
                 )
 
-        application = resolve_application_context(request)
+        application = resolve_application_context(
+            request,
+            trusted_target_query_keys=trusted_target_query_keys_for_request(request),
+        )
         if int(user.idApp) != int(application.ApplicationID):
             raise AuthenticationFailed(
                 "Authenticated user does not belong to the requested application.",

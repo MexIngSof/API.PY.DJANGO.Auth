@@ -7,6 +7,7 @@ from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 from auth.email_settings import get_email_settings, resolve_email_backend
+from auth.cookie_policy import resolve_cookie_policy
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -20,7 +21,16 @@ if not SECRET_KEY:
 DEBUG = getenv("DEBUG", "False") == "True"
 DEVELOPMENT_MODE = getenv("DEVELOPMENT_MODE", "False") == "True"
 
-ALLOWED_HOSTS = [host for host in getenv("ALLOWED_HOSTS", "").split(",") if host]
+def resolve_allowed_hosts(primary=None, django_fallback=None):
+    if primary is None:
+        primary = getenv("ALLOWED_HOSTS", "")
+    if django_fallback is None:
+        django_fallback = getenv("DJANGO_ALLOWED_HOSTS", "")
+    configured = primary or django_fallback or ""
+    return [host.strip() for host in configured.split(",") if host.strip()]
+
+
+ALLOWED_HOSTS = resolve_allowed_hosts()
 CSRF_TRUSTED_ORIGINS = [origin for origin in getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin]
 CORS_ALLOWED_ORIGINS = [origin for origin in getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin]
 CORS_ALLOW_CREDENTIALS = True
@@ -235,6 +245,18 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
 }
+
+_cookie_policy = resolve_cookie_policy()
+AUTH_COOKIE = "access"
+AUTH_COOKIE_ACCESS_MAX_AGE = int(getenv("AUTH_COOKIE_ACCESS_MAX_AGE", "900"))
+AUTH_COOKIE_REFRESH_MAX_AGE = int(getenv("AUTH_COOKIE_REFRESH_MAX_AGE", "604800"))
+AUTH_COOKIE_PATH = getenv("AUTH_COOKIE_PATH", "/")
+AUTH_COOKIE_SECURE = _cookie_policy.secure
+AUTH_COOKIE_HTTP_ONLY = True
+AUTH_COOKIE_SAMESITE = _cookie_policy.same_site
+CSRF_COOKIE_SECURE = _cookie_policy.secure
+CSRF_COOKIE_SAMESITE = _cookie_policy.same_site
+CSRF_COOKIE_HTTPONLY = False
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = getenv("SOCIAL_AUTH_GOOGLE_OAUTH2_KEY", "")
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = getenv("SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET", "")

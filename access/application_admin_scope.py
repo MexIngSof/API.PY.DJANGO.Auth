@@ -9,7 +9,10 @@ ADMIN_TARGET_QUERY_KEYS = ("application_code", "ApplicationCode")
 
 def resolve_admin_target_application(request):
     """Resolve administrative target without allowing query params to define actor scope."""
-    actor_application = resolve_application_context(request)
+    actor_application = resolve_application_context(
+        request,
+        trusted_target_query_keys=ADMIN_TARGET_QUERY_KEYS,
+    )
     requested_code = ""
     for key in ADMIN_TARGET_QUERY_KEYS:
         value = request.query_params.get(key)

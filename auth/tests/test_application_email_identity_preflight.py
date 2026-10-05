@@ -10,7 +10,9 @@ from access.models import Applications
 
 class ApplicationEmailIdentityPreflightTests(TestCase):
     def setUp(self):
-        self.application = Applications.objects.create(Code="REFAPART", Name="RefaPart", IsActive=True)
+        self.application, _ = Applications.objects.get_or_create(
+            Code="REFAPART", defaults={"Name": "RefaPart", "IsActive": True}
+        )
         self.User = get_user_model()
 
     def _create_raw_user(self, email, application_id):
@@ -37,7 +39,9 @@ class ApplicationEmailIdentityPreflightTests(TestCase):
             call_command("audit_application_email_identity", stdout=StringIO())
 
     def test_same_normalized_email_in_different_apps_is_not_duplicate_group(self):
-        other = Applications.objects.create(Code="JOBCRON", Name="JobCron", IsActive=True)
+        other, _ = Applications.objects.get_or_create(
+            Code="JOBCRON", defaults={"Name": "JobCron", "IsActive": True}
+        )
         self._create_raw_user("user@example.com", self.application.ApplicationID)
         self._create_raw_user("USER@example.com", other.ApplicationID)
         output = StringIO()
