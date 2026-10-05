@@ -33,49 +33,20 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     last_login = models.DateTimeField(null=True, blank=True, db_column="LastLogin")
     first_name = models.CharField(max_length=255, db_column="FirstName")
     last_name = models.CharField(max_length=255, db_column="LastName")
-    email = models.EmailField(max_length=255, db_column="Email")
+    email = models.EmailField(max_length=255, unique=True, db_column="Email")
     is_active = models.BooleanField(default=False, db_column="IsActive")
     is_staff = models.BooleanField(default=False, db_column="IsStaff")
     is_superuser = models.BooleanField(default=False, db_column="IsSuperuser")
     must_change_password = models.BooleanField(default=False, db_column="MustChangePassword")
     idApp = models.IntegerField(null=False, blank=False, db_column="ApplicationId")
-    groups = models.ManyToManyField(
-        Group,
-        blank=True,
-        help_text="The groups this user belongs to.",
-        related_name="user_set",
-        related_query_name="user",
-        through="UserAccountGroup",
-        through_fields=("useraccount", "group"),
-        verbose_name="groups",
-    )
-    user_permissions = models.ManyToManyField(
-        Permission,
-        blank=True,
-        help_text="Specific permissions for this user.",
-        related_name="user_set",
-        related_query_name="user",
-        through="UserAccountUserPermission",
-        through_fields=("useraccount", "permission"),
-        verbose_name="user permissions",
-    )
-
+    groups = models.ManyToManyField(Group, blank=True, help_text="The groups this user belongs to.", related_name="user_set", related_query_name="user", through="UserAccountGroup", through_fields=("useraccount", "group"), verbose_name="groups")
+    user_permissions = models.ManyToManyField(Permission, blank=True, help_text="Specific permissions for this user.", related_name="user_set", related_query_name="user", through="UserAccountUserPermission", through_fields=("useraccount", "permission"), verbose_name="user permissions")
     objects = UserAccountManager()
-
     USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["first_name", "last_name", "idApp"]
 
     class Meta:
         db_table = '"Auth"."UserAccounts"'
-        constraints = [
-            models.UniqueConstraint(
-                fields=("idApp", "email"),
-                name="uq_useraccounts_application_email",
-            ),
-        ]
-        indexes = [
-            models.Index(fields=("idApp", "email"), name="ix_useraccounts_app_email"),
-        ]
 
     def __str__(self):
         return self.email
@@ -85,7 +56,6 @@ class UserAccountGroup(models.Model):
     id = models.BigAutoField(primary_key=True, db_column="Id")
     useraccount = models.ForeignKey(UserAccount, on_delete=models.CASCADE, db_column="UserAccountId")
     group = models.ForeignKey(Group, on_delete=models.CASCADE, db_column="GroupId")
-
     class Meta:
         managed = False
         db_table = "user_useraccount_groups"
@@ -96,7 +66,6 @@ class UserAccountUserPermission(models.Model):
     id = models.BigAutoField(primary_key=True, db_column="Id")
     useraccount = models.ForeignKey(UserAccount, on_delete=models.CASCADE, db_column="UserAccountId")
     permission = models.ForeignKey(Permission, on_delete=models.CASCADE, db_column="PermissionId")
-
     class Meta:
         managed = False
         db_table = "user_useraccount_user_permissions"
