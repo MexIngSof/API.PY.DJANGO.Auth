@@ -33,7 +33,9 @@ try {
         'user/application_scope.py','auth/tests/test_trusted_application_context.py',
         'user/account_scope.py','user/scoped_views.py','auth/tests/test_application_scoped_identity_flows.py',
         'access/application_admin_scope.py','access/scoped_admin_views.py','access/test_application_scoped_rbac.py','access/test_application_admin_scope.py',
-        'user/management/commands/audit_application_email_identity.py','auth/tests/test_application_email_identity_preflight.py'
+        'user/management/commands/audit_application_email_identity.py','auth/tests/test_application_email_identity_preflight.py',
+        'user/mobile_session_views.py','auth/tests/test_application_scoped_refresh.py','auth/tests/test_application_scoped_session_revocation.py','auth/tests/test_application_scoped_password_change.py','auth/tests/test_reset_password_confirm_application_scope.py',
+        'auth/custom_email.py','auth/tests/test_email_trusted_application_context.py','auth/tests/test_application_email_template_fallback.py','auth/tests/test_email_sender_fallback_contract.py','auth/tests/test_email_branding_fallback_contract.py'
     )) {
         if (-not (Test-Path -LiteralPath $file)) { throw "FAIL: missing required file $file" }
     }
@@ -142,6 +144,8 @@ try {
         Invoke-Checked 'Task 4 scoped RBAC/admin tests' { python manage.py test access.test_application_scoped_rbac access.test_application_admin_scope -v 2 }
         Invoke-Checked 'Task 5 identity preflight tests' { python manage.py test auth.tests.test_application_email_identity_preflight -v 2 }
         Invoke-Checked 'Task 5 live identity preflight' { python manage.py audit_application_email_identity --json }
+        Invoke-Checked 'Task 6 application-scoped session/password tests' { python manage.py test auth.tests.test_application_scoped_refresh auth.tests.test_application_scoped_session_revocation auth.tests.test_application_scoped_password_change auth.tests.test_reset_password_confirm_application_scope -v 2 }
+        Invoke-Checked 'Task 7 multi-application email tests' { python manage.py test auth.tests.test_email_trusted_application_context auth.tests.test_application_email_template_fallback auth.tests.test_email_sender_fallback_contract auth.tests.test_email_branding_fallback_contract -v 2 }
         Invoke-Checked 'Django tests' { python manage.py test -v 2 }
         Invoke-Checked 'owner-local PostgreSQL certification' { python scripts/certify_erp_client_platform.py }
     }
