@@ -23,6 +23,18 @@ urlpatterns = [
         "api/users/reset_password_confirm/",
         ApplicationScopedUserViewSet.as_view({"post": "reset_password_confirm"}),
     ),
+    path(
+        "api/users/set_email/",
+        ApplicationScopedUserViewSet.as_view({"post": "set_username"}),
+    ),
+    path(
+        "api/users/reset_email/",
+        ApplicationScopedUserViewSet.as_view({"post": "reset_username"}),
+    ),
+    path(
+        "api/users/reset_email_confirm/",
+        ApplicationScopedUserViewSet.as_view({"post": "reset_username_confirm"}),
+    ),
     path("api/", include("djoser.urls")),
     path("api/auth/", include("user.urls")),
     path("api/access/", include("access.urls")),
