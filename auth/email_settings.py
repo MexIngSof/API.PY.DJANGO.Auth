@@ -25,6 +25,9 @@ class ProjectEmailSettings:
     access_key_id: str
     secret_access_key: str
     region_name: str
+    smtp_host: str
+    smtp_port: int | None
+    smtp_use_tls: bool
     from_email: str
     configuration_set: str
     return_path: str
@@ -32,6 +35,24 @@ class ProjectEmailSettings:
     public_app_url: str
     source: str
     is_complete: bool
+
+
+def resolve_email_backend(
+    email_settings: ProjectEmailSettings,
+    *,
+    explicit_backend: str = "",
+    deferred_external: bool = False,
+) -> str:
+    """Resolve Django's backend while preserving explicit project overrides."""
+    if explicit_backend:
+        return explicit_backend
+    if email_settings.provider == "ses" and email_settings.is_complete:
+        return "django_ses.SESBackend"
+    if email_settings.provider == "mailpit":
+        return "django.core.mail.backends.smtp.EmailBackend"
+    if deferred_external:
+        return "auth.email_backends.DeferredExternalEmailBackend"
+    return "django.core.mail.backends.console.EmailBackend"
 
 
 def _env(name: str) -> str:
@@ -102,6 +123,25 @@ def get_email_settings(
         provider = "ses" if any((access_key_id, secret_access_key, region_name, from_email)) else "console"
         provider_source = "derived"
 
+    smtp_host = ""
+    smtp_port: int | None = None
+    smtp_use_tls = False
+    smtp_sources: set[str] = set()
+    is_mailpit = provider.lower() == "mailpit"
+    if is_mailpit:
+        smtp_host, smtp_host_source = _project_value(normalized_project_code, "EMAIL_SMTP_HOST")
+        smtp_port_text, smtp_port_source = _project_value(normalized_project_code, "EMAIL_SMTP_PORT")
+        smtp_tls_text, smtp_tls_source = _project_value(normalized_project_code, "EMAIL_SMTP_USE_TLS")
+        smtp_host = smtp_host or "mailpit"
+        try:
+            smtp_port = int(smtp_port_text or "1025")
+        except ValueError as error:
+            raise ImproperlyConfigured("AUTH_EMAIL_SMTP_PORT must be an integer for Mailpit.") from error
+        if not 1 <= smtp_port <= 65535:
+            raise ImproperlyConfigured("AUTH_EMAIL_SMTP_PORT must be between 1 and 65535 for Mailpit.")
+        smtp_use_tls = smtp_tls_text.lower() == "true"
+        smtp_sources.update((smtp_host_source, smtp_port_source, smtp_tls_source))
+
     if not from_email:
         from_email = _env("AUTH_NOTIFICATION_FROM_EMAIL")
         from_source = "AUTH_NOTIFICATION_FROM_EMAIL" if from_email else "unconfigured"
@@ -120,9 +160,13 @@ def get_email_settings(
                 return_path_source,
                 support_source,
                 url_source,
+                *smtp_sources,
             }
         )
     )
+
+    if not development_mode and is_mailpit:
+        raise ImproperlyConfigured("Mailpit email provider is allowed only in development/local certification.")
 
     if (
         not development_mode
@@ -152,6 +196,9 @@ def get_email_settings(
         access_key_id=access_key_id,
         secret_access_key=secret_access_key,
         region_name=region_name,
+        smtp_host=smtp_host,
+        smtp_port=smtp_port,
+        smtp_use_tls=smtp_use_tls,
         from_email=from_email,
         configuration_set=configuration_set,
         return_path=return_path,

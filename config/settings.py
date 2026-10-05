@@ -6,7 +6,7 @@ from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
-from auth.email_settings import get_email_settings
+from auth.email_settings import get_email_settings, resolve_email_backend
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
@@ -141,14 +141,18 @@ AWS_SES_RETURN_PATH = AUTH_EMAIL_SETTINGS.return_path or None
 USE_SES_V2 = True
 AWS_SES_REGION_ENDPOINT = f"email.{AWS_SES_REGION_NAME}.amazonaws.com" if AWS_SES_REGION_NAME else ""
 
-EMAIL_BACKEND = getenv("EMAIL_BACKEND")
-if not EMAIL_BACKEND:
-    if AUTH_EMAIL_SETTINGS.provider == "ses" and AUTH_EMAIL_SETTINGS.is_complete:
-        EMAIL_BACKEND = "django_ses.SESBackend"
-    elif AUTH_EMAIL_DEFERRED_EXTERNAL:
-        EMAIL_BACKEND = "auth.email_backends.DeferredExternalEmailBackend"
-    else:
-        EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"
+EMAIL_BACKEND = resolve_email_backend(
+    AUTH_EMAIL_SETTINGS,
+    explicit_backend=getenv("EMAIL_BACKEND", ""),
+    deferred_external=AUTH_EMAIL_DEFERRED_EXTERNAL,
+)
+if AUTH_EMAIL_SETTINGS.provider == "mailpit":
+    EMAIL_HOST = AUTH_EMAIL_SETTINGS.smtp_host
+    EMAIL_PORT = AUTH_EMAIL_SETTINGS.smtp_port
+    EMAIL_USE_TLS = AUTH_EMAIL_SETTINGS.smtp_use_tls
+    EMAIL_USE_SSL = False
+    EMAIL_HOST_USER = getenv("AUTH_EMAIL_SMTP_USERNAME", "")
+    EMAIL_HOST_PASSWORD = getenv("AUTH_EMAIL_SMTP_PASSWORD", "")
 AUTH_EMAIL_DELIVERY_FAIL_OPEN = getenv("AUTH_EMAIL_DELIVERY_FAIL_OPEN", "True") == "True"
 
 DOMAIN = getenv("DOMAIN")
