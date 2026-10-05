@@ -137,15 +137,21 @@ class ApplicationScopedUserViewSet(CustomUserViewSet):
         user = find_local_account(application, email)
 
         if user is not None and not user.is_active:
-            djoser_settings.EMAIL.activation(request, {"user": user}).send(
-                [get_user_email(user)]
-            )
-            record_access_event(
-                request,
-                "identity.activation.resent",
-                user=user,
-                application=application,
-            )
+            try:
+                djoser_settings.EMAIL.activation(request, {"user": user}).send(
+                    [get_user_email(user)]
+                )
+            except Exception:
+                # Delivery failures are recorded by the email owner. Keep the
+                # public response generic to avoid account enumeration.
+                pass
+            else:
+                record_access_event(
+                    request,
+                    "identity.activation.resent",
+                    user=user,
+                    application=application,
+                )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def reset_password(self, request, *args, **kwargs):
@@ -154,20 +160,26 @@ class ApplicationScopedUserViewSet(CustomUserViewSet):
         user = find_local_account(application, email, active_only=True)
 
         if user is not None:
-            djoser_settings.EMAIL.password_reset(request, {"user": user}).send(
-                [get_user_email(user)]
-            )
-            record_access_event(
-                request,
-                "identity.password.reset.requested",
-                user=user,
-                application=application,
-                metadata={
-                    "first_access": bool(
-                        user.must_change_password and not user.has_usable_password()
-                    )
-                },
-            )
+            try:
+                djoser_settings.EMAIL.password_reset(request, {"user": user}).send(
+                    [get_user_email(user)]
+                )
+            except Exception:
+                # Internal failure stays observable in EmailDeliveryLogs while
+                # the public contract remains anti-enumeration safe.
+                pass
+            else:
+                record_access_event(
+                    request,
+                    "identity.password.reset.requested",
+                    user=user,
+                    application=application,
+                    metadata={
+                        "first_access": bool(
+                            user.must_change_password and not user.has_usable_password()
+                        )
+                    },
+                )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def reset_password_confirm(self, request, *args, **kwargs):
@@ -231,15 +243,19 @@ class ApplicationScopedUserViewSet(CustomUserViewSet):
         user = find_local_account(application, email, active_only=True)
 
         if user is not None:
-            djoser_settings.EMAIL.username_reset(request, {"user": user}).send(
-                [get_user_email(user)]
-            )
-            record_access_event(
-                request,
-                "identity.email.reset.requested",
-                user=user,
-                application=application,
-            )
+            try:
+                djoser_settings.EMAIL.username_reset(request, {"user": user}).send(
+                    [get_user_email(user)]
+                )
+            except Exception:
+                pass
+            else:
+                record_access_event(
+                    request,
+                    "identity.email.reset.requested",
+                    user=user,
+                    application=application,
+                )
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def reset_username_confirm(self, request, *args, **kwargs):
