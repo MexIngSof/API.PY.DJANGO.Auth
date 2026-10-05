@@ -6,14 +6,11 @@ class UserAccountManager(BaseUserManager):
     def create_user(self, email, password=None, **kwargs):
         if not email:
             raise ValueError("Users must have an email address")
-
         id_app = kwargs.pop("idApp", None)
         email = self.normalize_email(email).lower()
         user = self.model(email=email, **kwargs)
-
         if id_app is not None:
             user.idApp = id_app
-
         user.set_password(password)
         user.save(using=self._db)
         return user
@@ -33,7 +30,7 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
     last_login = models.DateTimeField(null=True, blank=True, db_column="LastLogin")
     first_name = models.CharField(max_length=255, db_column="FirstName")
     last_name = models.CharField(max_length=255, db_column="LastName")
-    email = models.EmailField(max_length=255, unique=True, db_column="Email")
+    email = models.EmailField(max_length=255, db_column="Email")
     is_active = models.BooleanField(default=False, db_column="IsActive")
     is_staff = models.BooleanField(default=False, db_column="IsStaff")
     is_superuser = models.BooleanField(default=False, db_column="IsSuperuser")
@@ -47,6 +44,8 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         db_table = '"Auth"."UserAccounts"'
+        constraints = [models.UniqueConstraint(fields=("idApp", "email"), name="uq_useraccounts_application_email")]
+        indexes = [models.Index(fields=("idApp", "email"), name="ix_useraccounts_app_email")]
 
     def __str__(self):
         return self.email
