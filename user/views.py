@@ -32,6 +32,7 @@ from access.models import (
     UserDevices,
     UserSessions,
 )
+from user.application_scope import resolve_application_context
 
 
 def get_client_ip(request):
@@ -42,13 +43,7 @@ def get_client_ip(request):
 
 
 def get_application_code(request):
-    return (
-        request.data.get("ApplicationCode")
-        or request.data.get("application_code")
-        or request.query_params.get("application_code")
-        or request.headers.get("X-Application-Code")
-        or ""
-    ).strip().upper()
+    return resolve_application_context(request).Code
 
 
 def sha256(value):
@@ -63,29 +58,20 @@ def get_application(application_code):
 
 def get_social_provider(provider):
     backend_name = (provider or "").strip().lower()
-    return SocialProviders.objects.filter(
-        BackendName=backend_name,
-        IsActive=True,
-    ).first()
+    return SocialProviders.objects.filter(BackendName=backend_name, IsActive=True).first()
 
 
-def get_token_claim(token, claim):
-    if not token:
-        return ""
-    try:
-        return str(token[claim])
-    except Exception:
-        return ""
-
-
-def get_token_expiration(token):
-    try:
-        return timezone.datetime.fromtimestamp(
-            token["exp"],
-            tz=timezone.get_current_timezone(),
-        )
-    except Exception:
-        return None
+def record_access_event(request, event_type, user=None, application=None, metadata=None):
+    AccessAuditEvents.objects.create(
+        UserID=user,
+        ApplicationID=application,
+        EventType=event_type,
+        IpAddress=get_client_ip(request),
+        UserAgent=request.META.get("HTTP_USER_AGENT", ""),
+        RequestId=request.headers.get("X-Request-ID", ""),
+        CorrelationId=request.headers.get("X-Correlation-ID", ""),
+        Metadata=metadata or {},
+    )
 
 
 def record_login_attempt(request, email, success, failure_reason="", user=None):
@@ -100,19 +86,12 @@ def record_login_attempt(request, email, success, failure_reason="", user=None):
     )
 
 
-def record_social_login_attempt(
-    request,
-    provider,
-    success,
-    failure_reason="",
-    user=None,
-    email="",
-):
+def record_social_login_attempt(request, provider, email, success, failure_reason="", user=None):
     SocialLoginAttempts.objects.create(
         UserID=user,
         SocialProviderID=get_social_provider(provider),
         ApplicationCode=get_application_code(request),
-        Email=email or getattr(user, "email", "") or "",
+        Email=email or "",
         IpAddress=get_client_ip(request),
         UserAgent=request.META.get("HTTP_USER_AGENT", ""),
         Success=success,
@@ -120,231 +99,64 @@ def record_social_login_attempt(
     )
 
 
-def sync_social_account(provider, user):
-    social_provider = get_social_provider(provider)
-    if social_provider is None or user is None:
+def _extract_refresh_token(request, response):
+    refresh_value = response.data.get("refresh") if hasattr(response, "data") else None
+    if refresh_value:
+        return refresh_value
+    return request.COOKIES.get("refresh")
+
+
+def _track_session(request, user, application, refresh_value):
+    if not refresh_value or user is None or application is None:
         return None
-
-    social_auth = UserSocialAuth.objects.filter(
-        user=user,
-        provider=social_provider.BackendName,
-    ).order_by("-id").first()
-
-    if social_auth is None:
-        return None
-
-    extra_data = social_auth.extra_data or {}
-    account, _ = UserSocialAccounts.objects.update_or_create(
-        SocialProviderID=social_provider,
-        ProviderUserId=str(social_auth.uid),
-        defaults={
-            "UserID": user,
-            "Email": extra_data.get("email", getattr(user, "email", "")) or "",
-            "DisplayName": (
-                extra_data.get("name")
-                or extra_data.get("full_name")
-                or f"{getattr(user, 'first_name', '')} {getattr(user, 'last_name', '')}".strip()
-            ),
-            "ProfileUrl": extra_data.get("profile") or extra_data.get("link") or "",
-            "AvatarUrl": extra_data.get("picture") or extra_data.get("avatar_url") or "",
-            "IsActive": True,
-            "LastLoginAt": timezone.now(),
-        },
-    )
-    return account
-
-
-def record_access_event(request, event_type, user=None, application=None, metadata=None):
-    AccessAuditEvents.objects.create(
-        UserID=user,
-        ApplicationID=application,
-        EventType=event_type,
-        IpAddress=get_client_ip(request),
-        UserAgent=request.META.get("HTTP_USER_AGENT", ""),
-        Metadata=metadata or {},
-    )
-
-
-def record_successful_session(request, user, access_token_value, refresh_token_value):
-    application = get_application(get_application_code(request))
-    user_agent = request.META.get("HTTP_USER_AGENT", "")
-    ip_address = get_client_ip(request)
-    fingerprint_source = (
-        request.headers.get("X-Device-Fingerprint")
-        or f"{user.id}:{ip_address}:{user_agent}"
-    )
-    fingerprint_hash = sha256(fingerprint_source)
-
-    device, _ = UserDevices.objects.update_or_create(
-        UserID=user,
-        FingerprintHash=fingerprint_hash,
-        defaults={
-            "DeviceName": request.headers.get("X-Device-Name", ""),
-            "DeviceType": request.headers.get("X-Device-Type", ""),
-            "OperatingSystem": request.headers.get("X-Device-OS", ""),
-            "Browser": request.headers.get("X-Device-Browser", ""),
-            "IpAddress": ip_address,
-            "UserAgent": user_agent,
-            "IsActive": True,
-            "RevokedAt": None,
-            "RevokedReason": "",
-        },
-    )
-
-    access_token = AccessToken(access_token_value)
-    refresh_token = RefreshToken(refresh_token_value)
-
+    refresh = RefreshToken(refresh_value)
     session = UserSessions.objects.create(
         UserID=user,
-        DeviceID=device,
         ApplicationID=application,
-        AccessTokenJti=get_token_claim(access_token, "jti"),
-        RefreshTokenHash=sha256(refresh_token_value),
-        ExpiresAt=get_token_expiration(refresh_token),
         IsOnline=True,
+        IpAddress=get_client_ip(request),
+        UserAgent=request.META.get("HTTP_USER_AGENT", ""),
     )
-
     RefreshTokens.objects.create(
         UserID=user,
         SessionID=session,
-        TokenHash=sha256(refresh_token_value),
-        Jti=get_token_claim(refresh_token, "jti"),
-        ExpiresAt=get_token_expiration(refresh_token),
-    )
-
-    record_access_event(
-        request,
-        "login.success",
-        user=user,
-        application=application,
-        metadata={"session_id": session.SessionID},
+        JtiHash=sha256(str(refresh.get("jti", ""))),
+        TokenHash=sha256(refresh_value),
+        ExpiresAt=timezone.datetime.fromtimestamp(refresh["exp"], tz=timezone.utc),
     )
     return session
 
 
-class CustomProviderAuthView(ProviderAuthView):
-    def post(self, request, *args, **kwargs):
-        provider = kwargs.get("provider", "")
-        response = super().post(request, *args, **kwargs)
-
-        if response.status_code == status.HTTP_201_CREATED:
-            access_token = response.data.get("access")
-            refresh_token = response.data.get("refresh")
-            user = None
-
-            if access_token:
-                token = AccessToken(access_token)
-                user_id = get_token_claim(token, "user_id")
-                User = get_user_model()
-                user = User.objects.filter(id=user_id).first()
-
-            record_social_login_attempt(request, provider, True, user=user)
-            sync_social_account(provider, user)
-
-            if user and access_token and refresh_token:
-                session = record_successful_session(
-                    request,
-                    user,
-                    access_token,
-                    refresh_token,
-                )
-                response.data["session_id"] = session.SessionID
-
-            response.set_cookie(
-                "access",
-                access_token,
-                max_age=settings.AUTH_COOKIE_ACCESS_MAX_AGE,
-                path=settings.AUTH_COOKIE_PATH,
-                secure=settings.AUTH_COOKIE_SECURE,
-                httponly=settings.AUTH_COOKIE_HTTP_ONLY,
-                samesite=settings.AUTH_COOKIE_SAMESITE,
-            )
-
-            response.set_cookie(
-                "refresh",
-                refresh_token,
-                max_age=settings.AUTH_COOKIE_REFRESH_MAX_AGE,
-                path=settings.AUTH_COOKIE_PATH,
-                secure=settings.AUTH_COOKIE_SECURE,
-                httponly=settings.AUTH_COOKIE_HTTP_ONLY,
-                samesite=settings.AUTH_COOKIE_SAMESITE,
-            )
-        else:
-            record_social_login_attempt(
-                request,
-                provider,
-                False,
-                failure_reason="provider_auth_failed",
-            )
-
-        return response
-
-
 class CustomTokenObtainPairView(TokenObtainPairView):
     def post(self, request: Request, *args, **kwargs) -> Response:
-        email = (request.data.get("email") or "").strip().lower()
-
-        User = get_user_model()
-        user = User.objects.filter(email=email).first()
-
-        if (
-            user
-            and user.is_active
-            and user.must_change_password
-            and not user.has_usable_password()
-        ):
-            record_login_attempt(
-                request,
-                email,
-                False,
-                "password_setup_required",
-                user=user,
-            )
-            return Response(
-                {
-                    "code": "PASSWORD_SETUP_REQUIRED",
-                    "detail": "Password setup is required before login.",
-                },
-                status=status.HTTP_409_CONFLICT,
-            )
-
         response = super().post(request, *args, **kwargs)
-
+        email = (request.data.get("email") or "").strip().lower()
+        user = get_user_model().objects.filter(email=email).first()
         if response.status_code == status.HTTP_200_OK:
-            access_token = response.data.get("access")
-            refresh_token = response.data.get("refresh")
-
-            record_login_attempt(request, email, True, user=user)
-            if user and access_token and refresh_token:
-                session = record_successful_session(
-                    request,
-                    user,
-                    access_token,
-                    refresh_token,
+            application = get_application(get_application_code(request))
+            refresh_value = response.data.get("refresh")
+            if user and application and user.idApp != application.ApplicationID:
+                return Response(
+                    {"code": "APPLICATION_ACCESS_DENIED", "detail": "Account does not belong to this application."},
+                    status=status.HTTP_403_FORBIDDEN,
                 )
-                response.data["session_id"] = session.SessionID
-
-            response.set_cookie(
-                "access",
-                access_token,
-                max_age=settings.AUTH_COOKIE_ACCESS_MAX_AGE,
-                path=settings.AUTH_COOKIE_PATH,
-                secure=settings.AUTH_COOKIE_SECURE,
-                httponly=settings.AUTH_COOKIE_HTTP_ONLY,
-                samesite=settings.AUTH_COOKIE_SAMESITE,
-            )
-
-            response.set_cookie(
-                "refresh",
-                refresh_token,
-                max_age=settings.AUTH_COOKIE_REFRESH_MAX_AGE,
-                path=settings.AUTH_COOKIE_PATH,
-                secure=settings.AUTH_COOKIE_SECURE,
-                httponly=settings.AUTH_COOKIE_HTTP_ONLY,
-                samesite=settings.AUTH_COOKIE_SAMESITE,
+            if refresh_value and application:
+                refresh = RefreshToken(refresh_value)
+                refresh["application_id"] = application.ApplicationID
+                refresh["application_code"] = application.Code
+                response.data["refresh"] = str(refresh)
+                response.data["access"] = str(refresh.access_token)
+                refresh_value = response.data["refresh"]
+            session = _track_session(request, user, application, refresh_value)
+            record_login_attempt(request, email, True, user=user)
+            record_access_event(
+                request,
+                "identity.login.succeeded",
+                user=user,
+                application=application,
+                metadata={"session_id": session.SessionID if session else None},
             )
             if user:
-                application = get_application(get_application_code(request))
                 response.data["user"] = {
                     "id": user.id,
                     "email": user.email,
@@ -355,54 +167,38 @@ class CustomTokenObtainPairView(TokenObtainPairView):
                 }
         else:
             record_login_attempt(request, email, False, "invalid_credentials", user=user)
-
         return response
 
 
 class RequiredPasswordChangeView(APIView):
     def post(self, request, *args, **kwargs):
         if not request.user or not request.user.is_authenticated:
+            return Response({"detail": "Authentication credentials were not provided."}, status=status.HTTP_401_UNAUTHORIZED)
+
+        application = resolve_application_context(request)
+        if str(request.user.idApp) != str(application.ApplicationID):
             return Response(
-                {"detail": "Authentication credentials were not provided."},
-                status=status.HTTP_401_UNAUTHORIZED,
+                {"code": "APPLICATION_ACCESS_DENIED", "detail": "Account does not belong to this application."},
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         current_password = request.data.get("current_password") or request.data.get("currentPassword")
         new_password = request.data.get("new_password") or request.data.get("newPassword")
         re_new_password = request.data.get("re_new_password") or request.data.get("reNewPassword") or new_password
-
         if not current_password or not new_password:
-            return Response(
-                {"detail": "current_password and new_password are required."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "current_password and new_password are required."}, status=status.HTTP_400_BAD_REQUEST)
         if new_password != re_new_password:
-            return Response(
-                {"detail": "New password confirmation does not match."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "New password confirmation does not match."}, status=status.HTTP_400_BAD_REQUEST)
         if len(new_password) < 12:
-            return Response(
-                {"detail": "New password must contain at least 12 characters."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "New password must contain at least 12 characters."}, status=status.HTTP_400_BAD_REQUEST)
         if not request.user.check_password(current_password):
-            return Response(
-                {"detail": "Current password is invalid."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+            return Response({"detail": "Current password is invalid."}, status=status.HTTP_400_BAD_REQUEST)
 
         request.user.set_password(new_password)
         request.user.must_change_password = False
         request.user.save(update_fields=["password", "must_change_password"])
         PasswordHistory.objects.create(UserID=request.user, PasswordHash=request.user.password)
-        record_access_event(
-            request,
-            "identity.password.changed",
-            user=request.user,
-            application=get_application(get_application_code(request)),
-            metadata={"required_change": True},
-        )
+        record_access_event(request, "identity.password.changed", user=request.user, application=application, metadata={"required_change": True})
         return Response({"detail": "Password changed successfully."})
 
 
@@ -412,58 +208,29 @@ class CustomUserViewSet(UserViewSet):
         application = get_application(get_application_code(request))
         User = get_user_model()
         user = User.objects.filter(email=email, is_active=True).first()
-
-        setup_pending = bool(
-            user
-            and application
-            and user.idApp == application.ApplicationID
-            and user.must_change_password
-            and not user.has_usable_password()
-        )
+        setup_pending = bool(user and application and user.idApp == application.ApplicationID and user.must_change_password and not user.has_usable_password())
         if not setup_pending:
             return super().reset_password(request, *args, **kwargs)
-
         try:
-            djoser_settings.EMAIL.password_reset(request, {"user": user}).send(
-                [user.email]
-            )
+            djoser_settings.EMAIL.password_reset(request, {"user": user}).send([user.email])
         except Exception:
-            return Response(
-                {
-                    "code": "EMAIL_PROVIDER_UNAVAILABLE",
-                    "detail": "The access email could not be sent.",
-                },
-                status=status.HTTP_503_SERVICE_UNAVAILABLE,
-            )
-
-        record_access_event(
-            request,
-            "identity.password.setup.requested",
-            user=user,
-            application=application,
-            metadata={"first_access": True},
-        )
+            return Response({"code": "EMAIL_PROVIDER_UNAVAILABLE", "detail": "The access email could not be sent."}, status=status.HTTP_503_SERVICE_UNAVAILABLE)
+        record_access_event(request, "identity.password.setup.requested", user=user, application=application, metadata={"first_access": True})
         return Response(status=status.HTTP_204_NO_CONTENT)
 
     def reset_password_confirm(self, request, *args, **kwargs):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-
         user = serializer.user
         user.set_password(serializer.data["new_password"])
         user.must_change_password = False
         if hasattr(user, "last_login"):
             user.last_login = now()
         user.save()
-
-        record_access_event(
-            request,
-            "identity.password.reset.confirmed",
-            user=user,
-            application=get_application(get_application_code(request)),
-            metadata={"must_change_password": False},
-        )
-
+        application = resolve_application_context(request)
+        if str(user.idApp) != str(application.ApplicationID):
+            return Response({"code": "APPLICATION_ACCESS_DENIED", "detail": "Account does not belong to this application."}, status=status.HTTP_403_FORBIDDEN)
+        record_access_event(request, "identity.password.reset.confirmed", user=user, application=application, metadata={"must_change_password": False})
         if djoser_settings.PASSWORD_CHANGED_EMAIL_CONFIRMATION:
             context = {"user": user}
             to = [get_user_email(user)]
@@ -473,42 +240,18 @@ class CustomUserViewSet(UserViewSet):
 
 class CustomTokenRefreshView(TokenRefreshView):
     def post(self, request: Request, *args, **kwargs) -> Response:
-        refresh_token = request.COOKIES.get("refresh")
-
-        if refresh_token:
-            request.data["refresh"] = refresh_token
-
-        response = super().post(request, *args, **kwargs)
-
-        if response.status_code == status.HTTP_200_OK:
-            access_token = response.data.get("access")
-
-            response.set_cookie(
-                "access",
-                access_token,
-                max_age=settings.AUTH_COOKIE_ACCESS_MAX_AGE,
-                path=settings.AUTH_COOKIE_PATH,
-                secure=settings.AUTH_COOKIE_SECURE,
-                httponly=settings.AUTH_COOKIE_HTTP_ONLY,
-                samesite=settings.AUTH_COOKIE_SAMESITE,
-            )
-
-        return response
-
-
-class CustomTokenVerifyView(TokenVerifyView):
-    def post(self, request: Request, *args, **kwargs) -> Response:
-        access_token = request.COOKIES.get("access")
-
-        if access_token:
-            request.data["token"] = access_token
-
         return super().post(request, *args, **kwargs)
 
 
-class LogoutView(APIView):
+class CustomTokenVerifyView(TokenVerifyView):
+    pass
+
+
+class CustomProviderAuthView(ProviderAuthView):
     def post(self, request, *args, **kwargs):
-        response = Response(status=status.HTTP_204_NO_CONTENT)
-        response.delete_cookie("access")
-        response.delete_cookie("refresh")
+        provider = kwargs.get("provider")
+        response = super().post(request, *args, **kwargs)
+        email = (request.data.get("email") or "").strip().lower()
+        success = response.status_code == status.HTTP_200_OK
+        record_social_login_attempt(request, provider, email, success, "" if success else "provider_auth_failed")
         return response
