@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 from django.test import SimpleTestCase, override_settings
+from django.urls import resolve
 from rest_framework.test import APIRequestFactory
 
 from user.account_scope import find_local_account, normalize_email
@@ -67,3 +68,43 @@ class ApplicationScopedIdentityFlowTests(SimpleTestCase):
 
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["code"], "APPLICATION_ACCESS_DENIED")
+
+    @patch("user.scoped_views.djoser_settings")
+    @patch("user.scoped_views.find_local_account")
+    @patch("user.scoped_views.resolve_application_context")
+    def test_email_reset_request_uses_application_scoped_account(
+        self,
+        resolve_application_context_mock,
+        find_local_account_mock,
+        djoser_settings_mock,
+    ):
+        application = SimpleNamespace(ApplicationID=4, Code="REFAPART")
+        user = SimpleNamespace(email="user@example.com", idApp=4, is_active=True)
+        resolve_application_context_mock.return_value = application
+        find_local_account_mock.return_value = user
+        message = Mock()
+        djoser_settings_mock.EMAIL.username_reset.return_value = message
+        request = APIRequestFactory().post(
+            "/api/users/reset_email/",
+            {"email": " USER@example.com "},
+            format="json",
+            HTTP_X_APPLICATION_CODE="REFAPART",
+            HTTP_X_GATEWAY_INTERNAL_TOKEN="test-context",
+        )
+
+        response = ApplicationScopedUserViewSet.as_view({"post": "reset_username"})(request)
+
+        self.assertEqual(response.status_code, 204)
+        find_local_account_mock.assert_called_once_with(
+            application,
+            "user@example.com",
+            active_only=True,
+        )
+        message.send.assert_called_once_with([user.email])
+
+    def test_email_reset_routes_use_scoped_viewset(self):
+        reset_match = resolve("/api/users/reset_email/")
+        confirm_match = resolve("/api/users/reset_email_confirm/")
+
+        self.assertEqual(reset_match.func.cls, ApplicationScopedUserViewSet)
+        self.assertEqual(confirm_match.func.cls, ApplicationScopedUserViewSet)
