@@ -10,6 +10,7 @@ from access.models import (
     Modules,
     Permissions,
     RolePermissions,
+    UserPermissions,
 )
 from access.scoped_rbac_views import ApplicationScopedMePermissionsViewSet
 from roles.models import Roles, UserRoles
@@ -75,6 +76,56 @@ class ApplicationScopedRbacTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["roles"]), 1)
         self.assertEqual(response.data["permissions"], [{"code": "AUTH.READ", "allow": True}])
+
+    def test_direct_application_permission_is_effective_without_role_grant(self):
+        direct_permission = Permissions.objects.create(
+            Code="AUTH.DIRECT",
+            ModuleID=self.module,
+            ActionID=self.action,
+        )
+        ApplicationPermissions.objects.create(
+            ApplicationID=self.application,
+            PermissionID=direct_permission,
+        )
+        UserPermissions.objects.create(
+            UserID=self.user,
+            PermissionID=direct_permission,
+            Allow=True,
+            Reason="scoped direct grant",
+        )
+
+        response = self._response("REFAPART")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            {"code": "AUTH.DIRECT", "allow": True},
+            response.data["permissions"],
+        )
+
+    def test_direct_application_denial_is_effective_without_role_grant(self):
+        direct_permission = Permissions.objects.create(
+            Code="AUTH.DIRECT",
+            ModuleID=self.module,
+            ActionID=self.action,
+        )
+        ApplicationPermissions.objects.create(
+            ApplicationID=self.application,
+            PermissionID=direct_permission,
+        )
+        UserPermissions.objects.create(
+            UserID=self.user,
+            PermissionID=direct_permission,
+            Allow=False,
+            Reason="scoped direct denial",
+        )
+
+        response = self._response("REFAPART")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn(
+            {"code": "AUTH.DIRECT", "allow": False},
+            response.data["permissions"],
+        )
 
     def test_mapping_in_other_application_does_not_authorize_current_application(self):
         ApplicationRoles.objects.create(ApplicationID=self.other_application, RoleID=self.role)

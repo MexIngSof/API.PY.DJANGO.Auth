@@ -49,8 +49,7 @@ class ApplicationScopedMePermissionsViewSet(viewsets.ViewSet):
         effective_perms = {permission.Code: True for permission in role_perms}
         for user_permission in user_perms:
             code = user_permission.PermissionID.Code
-            if code in effective_perms:
-                effective_perms[code] = user_permission.Allow
+            effective_perms[code] = user_permission.Allow
 
         role_module_ids = {
             permission.ModuleID_id
