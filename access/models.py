@@ -306,6 +306,33 @@ class ApplicationPermissions(models.Model):
         return f"{self.ApplicationID.Code} -> {self.PermissionID.Code}"
 
 
+class ApplicationRolePermissions(models.Model):
+    id = models.BigAutoField(primary_key=True, db_column="Id")
+    ApplicationID = models.ForeignKey(
+        Applications,
+        on_delete=models.CASCADE,
+        db_column="ApplicationId",
+    )
+    RoleID = models.ForeignKey(Roles, on_delete=models.CASCADE, db_column="RoleId")
+    PermissionID = models.ForeignKey(
+        Permissions,
+        on_delete=models.CASCADE,
+        db_column="PermissionId",
+    )
+    CreatedAt = models.DateTimeField(auto_now_add=True, db_column="CreatedAt")
+    UpdatedAt = models.DateTimeField(auto_now=True, db_column="UpdatedAt")
+
+    class Meta:
+        db_table = '"Auth"."ApplicationRolePermissions"'
+        unique_together = ("ApplicationID", "RoleID", "PermissionID")
+
+    def __str__(self):
+        return (
+            f"{self.ApplicationID.Code} -> {self.RoleID.Name} "
+            f"-> {self.PermissionID.Code}"
+        )
+
+
 class RolePermissions(models.Model):
     id = models.BigAutoField(primary_key=True, db_column="Id")
     RoleID = models.ForeignKey(Roles, on_delete=models.CASCADE, db_column="RoleId")

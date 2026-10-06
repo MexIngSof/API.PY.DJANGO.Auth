@@ -5,6 +5,7 @@ from rest_framework.test import APIRequestFactory, force_authenticate
 from access.models import (
     Actions,
     ApplicationPermissions,
+    ApplicationRolePermissions,
     ApplicationRoles,
     Applications,
     Modules,
@@ -76,6 +77,33 @@ class ApplicationScopedRbacTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(len(response.data["roles"]), 1)
         self.assertEqual(response.data["permissions"], [{"code": "AUTH.READ", "allow": True}])
+
+    def test_application_role_permission_does_not_leak_to_another_application(self):
+        RolePermissions.objects.filter(
+            RoleID=self.role,
+            PermissionID=self.permission,
+        ).delete()
+        ApplicationRoles.objects.create(ApplicationID=self.application, RoleID=self.role)
+        ApplicationRoles.objects.create(ApplicationID=self.other_application, RoleID=self.role)
+        ApplicationPermissions.objects.create(
+            ApplicationID=self.application,
+            PermissionID=self.permission,
+        )
+        ApplicationPermissions.objects.create(
+            ApplicationID=self.other_application,
+            PermissionID=self.permission,
+        )
+        ApplicationRolePermissions.objects.create(
+            ApplicationID=self.application,
+            RoleID=self.role,
+            PermissionID=self.permission,
+        )
+
+        scoped_response = self._response("REFAPART")
+        other_response = self._response("JOBCRON")
+
+        self.assertEqual(scoped_response.data["permissions"], [{"code": "AUTH.READ", "allow": True}])
+        self.assertEqual(other_response.data["permissions"], [])
 
     def test_direct_application_permission_is_effective_without_role_grant(self):
         direct_permission = Permissions.objects.create(

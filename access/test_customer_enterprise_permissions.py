@@ -1,7 +1,21 @@
-from django.test import TestCase
+from importlib import import_module
 
-from access.models import ApplicationPermissions, ApplicationRoles, Applications, Permissions, RolePermissions
+from django.apps import apps
+from django.contrib.auth import get_user_model
+from django.test import TestCase, override_settings
+from rest_framework.test import APIRequestFactory, force_authenticate
+
+from access.models import (
+    ApplicationPermissions,
+    ApplicationRolePermissions,
+    ApplicationRoles,
+    Applications,
+    Permissions,
+    RolePermissions,
+)
+from access.scoped_rbac_views import ApplicationScopedMePermissionsViewSet
 from roles.models import Roles
+from roles.models import UserRoles
 
 
 EXPECTED_PERMISSIONS = {
@@ -13,6 +27,7 @@ EXPECTED_PERMISSIONS = {
 }
 
 
+@override_settings(GATEWAY_INTERNAL_SHARED_SECRET="rbac-test-secret")
 class CustomerEnterprisePermissionSeedTests(TestCase):
     def test_jobcron_exposes_customer_enterprise_permissions(self):
         application = Applications.objects.get(Code="JOBCRON")
@@ -41,6 +56,64 @@ class CustomerEnterprisePermissionSeedTests(TestCase):
                 PermissionID__Code__in={"customer.read", "customer.write"},
             ).exists()
         )
+
+    def test_mexingsof_customer_role_receives_exactly_capture_read_and_write(self):
+        application = Applications.objects.get(Code="MEXINGSOF")
+        customer = Roles.objects.get(Name="CUSTOMER")
+        assigned = set(
+            ApplicationRolePermissions.objects.filter(
+                ApplicationID=application,
+                RoleID=customer,
+            ).values_list("PermissionID__Code", flat=True)
+        )
+        self.assertEqual(assigned, {"customer.read", "customer.write"})
+
+    def test_mexingsof_customer_role_permission_seed_is_idempotent(self):
+        seed = import_module(
+            "access.migrations.0043_seed_mexingsof_customer_role_permissions"
+        ).seed_mexingsof_customer_role_permissions
+        application = Applications.objects.get(Code="MEXINGSOF")
+        customer = Roles.objects.get(Name="CUSTOMER")
+
+        seed(apps, None)
+        seed(apps, None)
+
+        assigned = set(
+            ApplicationRolePermissions.objects.filter(
+                ApplicationID=application,
+                RoleID=customer,
+            ).values_list("PermissionID__Code", flat=True)
+        )
+        self.assertEqual(assigned, {"customer.read", "customer.write"})
+
+    def test_other_application_customer_does_not_inherit_mexingsof_grants(self):
+        application = Applications.objects.get(Code="TECNOTELEC")
+        customer = Roles.objects.get(Name="CUSTOMER")
+        user = get_user_model().objects.create_user(
+            email="tecnotelec-customer-rbac@example.local",
+            password="test-password",
+            idApp=application.ApplicationID,
+        )
+        UserRoles.objects.get_or_create(UserID=user, RoleID=customer)
+        permissions = list(Permissions.objects.filter(Code__in={"customer.read", "customer.write"}))
+        for permission in permissions:
+            ApplicationPermissions.objects.get_or_create(
+                ApplicationID=application,
+                PermissionID=permission,
+            )
+
+        request = APIRequestFactory().get(
+            "/api/access/me/permissions/",
+            HTTP_X_APPLICATION_CODE="TECNOTELEC",
+            HTTP_X_GATEWAY_INTERNAL_TOKEN="rbac-test-secret",
+        )
+        force_authenticate(request, user=user)
+        response = ApplicationScopedMePermissionsViewSet.as_view(
+            {"get": "list_permissions"}
+        )(request)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["permissions"], [])
 
     def test_only_jobcron_super_admin_receives_default_customer_enterprise_grant(self):
         super_admin = Roles.objects.get(Name="JOBCRON_SUPER_ADMIN")

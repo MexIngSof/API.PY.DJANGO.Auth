@@ -1,3 +1,4 @@
+from django.db.models import Q
 from rest_framework import viewsets
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
@@ -5,9 +6,11 @@ from rest_framework.response import Response
 
 from access.models import (
     ApplicationPermissions,
+    ApplicationRolePermissions,
     ApplicationRoles,
     Modules,
     Permissions,
+    RolePermissions,
     UserPermissions,
 )
 from access.serializers import ModuleSerializer, RoleSerializer
@@ -36,8 +39,16 @@ class ApplicationScopedMePermissionsViewSet(viewsets.ViewSet):
         application_permission_ids = ApplicationPermissions.objects.filter(
             ApplicationID=application,
         ).values_list("PermissionID_id", flat=True)
+        global_role_permission_ids = RolePermissions.objects.filter(
+            RoleID__in=roles,
+        ).values_list("PermissionID_id", flat=True)
+        scoped_role_permission_ids = ApplicationRolePermissions.objects.filter(
+            ApplicationID=application,
+            RoleID__in=roles,
+        ).values_list("PermissionID_id", flat=True)
         role_perms = Permissions.objects.filter(
-            rolepermissions__RoleID__in=roles,
+            Q(PermissionID__in=global_role_permission_ids)
+            | Q(PermissionID__in=scoped_role_permission_ids),
             PermissionID__in=application_permission_ids,
         ).select_related("ModuleID", "ActionID").distinct()
 
