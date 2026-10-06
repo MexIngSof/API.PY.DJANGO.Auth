@@ -66,12 +66,25 @@ E2E_USERS = (
     },
     {
         "app": "MEXINGSOF",
-        "email_env": "AUTH_E2E_MEXINGSOF_USER",
-        "password_env": "AUTH_E2E_MEXINGSOF_PASSWORD",
-        "default_email": "auth-e2e-mexingsof-user@example.local",
+        "email_env": "AUTH_E2E_MEXINGSOF_ADMIN_USER",
+        "password_env": "AUTH_E2E_MEXINGSOF_ADMIN_PASSWORD",
+        "default_email": "auth-e2e-mexingsof-admin@example.local",
+        "role": "MEXINGSOF_SETUP_ADMIN",
+        "first_name": "E2E",
+        "last_name": "MexIngSof Setup Admin",
+        "staff": True,
+        "superuser": False,
+    },
+    {
+        "app": "MEXINGSOF",
+        "email_env": "AUTH_E2E_MEXINGSOF_LIMITED_USER",
+        "password_env": "AUTH_E2E_MEXINGSOF_LIMITED_PASSWORD",
+        "legacy_email_env": "AUTH_E2E_MEXINGSOF_USER",
+        "legacy_password_env": "AUTH_E2E_MEXINGSOF_PASSWORD",
+        "default_email": "auth-e2e-mexingsof-limited@example.local",
         "role": "CUSTOMER",
         "first_name": "E2E",
-        "last_name": "MexIngSof User",
+        "last_name": "MexIngSof Limited",
         "staff": False,
         "superuser": False,
     },
@@ -161,7 +174,7 @@ class Command(BaseCommand):
             if selected and spec["app"] not in selected:
                 continue
 
-            password = os.getenv(spec["password_env"], fallback_password)
+            password = os.getenv(spec["password_env"], "") or os.getenv(spec.get("legacy_password_env", ""), "") or fallback_password
             if not password:
                 missing_password_vars.append(spec["password_env"])
                 continue
@@ -183,7 +196,7 @@ class Command(BaseCommand):
             )
             ApplicationRoles.objects.get_or_create(ApplicationID=application, RoleID=role)
 
-            email = os.getenv(spec["email_env"], spec["default_email"]).strip().lower()
+            email = (os.getenv(spec["email_env"], "") or os.getenv(spec.get("legacy_email_env", ""), "") or spec["default_email"]).strip().lower()
             user = UserAccount.objects.filter(email=email).first()
             created = user is None
             if created:

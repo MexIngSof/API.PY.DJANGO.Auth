@@ -1,6 +1,6 @@
 from django.test import TestCase
 
-from access.models import ApplicationPermissions, Applications, Permissions, RolePermissions
+from access.models import ApplicationPermissions, ApplicationRoles, Applications, Permissions, RolePermissions
 from roles.models import Roles
 
 
@@ -23,6 +23,25 @@ class CustomerEnterprisePermissionSeedTests(TestCase):
         )
         self.assertTrue(EXPECTED_PERMISSIONS.issubset(assigned))
 
+    def test_mexingsof_exposes_only_capture_read_and_write_permissions(self):
+        application = Applications.objects.get(Code="MEXINGSOF")
+        assigned = set(
+            ApplicationPermissions.objects.filter(ApplicationID=application).values_list(
+                "PermissionID__Code", flat=True
+            )
+        )
+        self.assertEqual(assigned.intersection(EXPECTED_PERMISSIONS), {"customer.read", "customer.write"})
+
+        application_role_ids = ApplicationRoles.objects.filter(
+            ApplicationID=application
+        ).values_list("RoleID", flat=True)
+        self.assertFalse(
+            RolePermissions.objects.filter(
+                RoleID__in=application_role_ids,
+                PermissionID__Code__in={"customer.read", "customer.write"},
+            ).exists()
+        )
+
     def test_only_jobcron_super_admin_receives_default_customer_enterprise_grant(self):
         super_admin = Roles.objects.get(Name="JOBCRON_SUPER_ADMIN")
         assigned = set(
@@ -31,6 +50,7 @@ class CustomerEnterprisePermissionSeedTests(TestCase):
             )
         )
         self.assertTrue(EXPECTED_PERMISSIONS.issubset(assigned))
+
 
         other_roles = set(
             RolePermissions.objects.filter(PermissionID__Code__in=EXPECTED_PERMISSIONS)
