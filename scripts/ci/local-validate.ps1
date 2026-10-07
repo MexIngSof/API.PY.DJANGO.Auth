@@ -4,6 +4,7 @@ $ErrorActionPreference='Stop'
 Set-StrictMode -Version Latest
 $root=(Resolve-Path (Join-Path $PSScriptRoot '../..')).Path
 $expectedPython='3.13.15'; $expectedDjango='5.2.17'; $expectedDrf='3.17.2'; $expectedPsycopg='3.2.13'; $expectedPostgres='16.15'; $baseline='django-api-2026.09'
+if([System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) -and [string]::IsNullOrWhiteSpace($env:AUTH_DB_HOST)){$env:AUTH_DB_HOST='127.0.0.1'}
 Push-Location $root
 try {
   function Assert-Command([string]$Name){if(-not(Get-Command $Name -ErrorAction SilentlyContinue)){throw "DEPENDENCY_BLOCKED: required command '$Name' is unavailable"}}

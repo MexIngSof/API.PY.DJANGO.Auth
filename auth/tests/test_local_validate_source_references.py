@@ -38,6 +38,13 @@ class LocalValidateSourceReferenceTests(unittest.TestCase):
             with self.subTest(command=command):
                 self.assertIn("--keepdb", command)
 
+    def test_validator_uses_windows_loopback_for_local_postgresql_by_default(self):
+        source = VALIDATOR.read_text(encoding="utf-8")
+
+        self.assertIn("IsOSPlatform", source)
+        self.assertIn("OSPlatform]::Windows", source)
+        self.assertIn("$env:AUTH_DB_HOST='127.0.0.1'", source)
+
     def test_postgres_certifier_reuses_the_local_test_database(self):
         source = CERTIFIER.read_text(encoding="utf-8")
         test_call = re.search(r'run\(\s*"test",(.*?)\n\s*\)', source, re.DOTALL)
