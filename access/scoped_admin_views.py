@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAdminUser
 from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
-from access.application_admin_scope import resolve_admin_target_application
+from access.application_admin_scope import ADMIN_TARGET_QUERY_KEYS, resolve_admin_target_application
 from access.models import (
     AccessAuditEvents,
     ApplicationPermissions,
@@ -19,6 +19,7 @@ from roles.models import Roles, UserRoles
 
 class ScopedAdminModelViewSet(ModelViewSet):
     permission_classes = [IsAdminUser]
+    trusted_application_target_query_keys = ADMIN_TARGET_QUERY_KEYS
 
     def get_target_application(self):
         target = getattr(self, "_target_application", None)

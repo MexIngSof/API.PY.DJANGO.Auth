@@ -1,4 +1,8 @@
 from django.conf import settings
+from django.middleware.csrf import get_token
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.permissions import AllowAny
+from rest_framework.views import APIView
 from django.contrib.auth import get_user_model
 from django.utils.timezone import now
 from djoser.compat import get_user_email
@@ -23,10 +27,27 @@ from user.views import (
 )
 
 
+def enforce_browser_login_csrf(request):
+    browser_headers = ("HTTP_ORIGIN", "HTTP_REFERER", "HTTP_SEC_FETCH_SITE")
+    if request.COOKIES.get(settings.CSRF_COOKIE_NAME) or any(
+        request.META.get(header) for header in browser_headers
+    ):
+        SessionAuthentication().enforce_csrf(request)
+
+
+class CsrfTokenView(APIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+
+    def get(self, request, *args, **kwargs):
+        return Response({"csrfToken": get_token(request._request)})
+
+
 class ApplicationScopedTokenObtainPairView(TokenObtainPairView):
     serializer_class = ApplicationScopedTokenObtainPairSerializer
 
     def post(self, request, *args, **kwargs):
+        enforce_browser_login_csrf(request)
         application = resolve_application_context(request)
         email = normalize_email(request.data.get("email"))
         user = find_local_account(application, email)
@@ -54,6 +75,7 @@ class ApplicationScopedTokenObtainPairView(TokenObtainPairView):
 
         response = super().post(request, *args, **kwargs)
         if response.status_code == status.HTTP_200_OK:
+            get_token(request._request)
             access_token = response.data.get("access")
             refresh_token = response.data.get("refresh")
             record_login_attempt(request, email, True, user=user)

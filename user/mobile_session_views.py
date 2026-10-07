@@ -1,4 +1,5 @@
 from django.conf import settings
+from rest_framework.authentication import SessionAuthentication
 from rest_framework import status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -27,8 +28,11 @@ def _application_matches(application, candidate):
 
 class CustomTokenRefreshView(TokenRefreshView):
     def post(self, request, *args, **kwargs):
+        refresh_cookie = request.COOKIES.get("refresh")
+        if refresh_cookie:
+            SessionAuthentication().enforce_csrf(request)
         application = resolve_application_context(request)
-        refresh_value = request.COOKIES.get("refresh") or request.data.get("refresh")
+        refresh_value = refresh_cookie or request.data.get("refresh")
         if not refresh_value:
             return Response(
                 {"code": "REFRESH_TOKEN_REQUIRED", "detail": "Refresh token is required."},
@@ -75,6 +79,17 @@ class CustomTokenRefreshView(TokenRefreshView):
         response = super().post(request, *args, **kwargs)
         if response.status_code == status.HTTP_200_OK:
             access_token = response.data.get("access")
+            refresh_token = response.data.get("refresh")
+            if refresh_token:
+                response.set_cookie(
+                    "refresh",
+                    refresh_token,
+                    max_age=settings.AUTH_COOKIE_REFRESH_MAX_AGE,
+                    path=settings.AUTH_COOKIE_PATH,
+                    secure=settings.AUTH_COOKIE_SECURE,
+                    httponly=settings.AUTH_COOKIE_HTTP_ONLY,
+                    samesite=settings.AUTH_COOKIE_SAMESITE,
+                )
             if access_token:
                 response.set_cookie(
                     "access",
@@ -92,8 +107,11 @@ class LogoutView(APIView):
     permission_classes = [AllowAny]
 
     def post(self, request, *args, **kwargs):
+        refresh_cookie = request.COOKIES.get("refresh")
+        if refresh_cookie:
+            SessionAuthentication().enforce_csrf(request)
         application = resolve_application_context(request)
-        refresh_value = request.COOKIES.get("refresh") or request.data.get("refresh")
+        refresh_value = refresh_cookie or request.data.get("refresh")
         tracked = tracked_refresh(refresh_value) if refresh_value else None
         if tracked is not None and not _application_matches(application, _tracked_application(tracked)):
             return Response(
@@ -116,6 +134,7 @@ class LogoutView(APIView):
             )
 
         response = Response(status=status.HTTP_204_NO_CONTENT)
-        response.delete_cookie("access")
-        response.delete_cookie("refresh")
+        response.delete_cookie("access", path=settings.AUTH_COOKIE_PATH)
+        response.delete_cookie("refresh", path=settings.AUTH_COOKIE_PATH)
+        response.delete_cookie(settings.CSRF_COOKIE_NAME)
         return response

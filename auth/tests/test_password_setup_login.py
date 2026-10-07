@@ -1,6 +1,7 @@
 from types import SimpleNamespace
 from unittest.mock import ANY, patch
 
+from django.middleware.csrf import CsrfViewMiddleware
 from django.test import SimpleTestCase, override_settings
 from rest_framework import status
 from rest_framework.response import Response
@@ -93,3 +94,43 @@ class PasswordSetupLoginTests(SimpleTestCase):
             "invalid_credentials",
             user=user,
         )
+
+    def test_successful_cookie_login_issues_a_browser_readable_csrf_cookie(self):
+        application = SimpleNamespace(ApplicationID=3, Code="JOBCRON")
+        user = SimpleNamespace(
+            id=88,
+            email="active@example.test",
+            first_name="Active",
+            last_name="User",
+            is_active=True,
+            must_change_password=False,
+            has_usable_password=lambda: True,
+        )
+        request = self.request("active@example.test")
+        with (
+            patch("user.scoped_views.resolve_application_context", return_value=application),
+            patch("user.scoped_views.find_local_account", return_value=user),
+            patch("user.scoped_views.record_login_attempt"),
+            patch(
+                "user.scoped_views.record_successful_session",
+                return_value=SimpleNamespace(SessionID="test-session"),
+            ),
+            patch(
+                "rest_framework_simplejwt.views.TokenObtainPairView.post",
+                return_value=Response(
+                    {"access": "access-token", "refresh": "refresh-token"},
+                    status=status.HTTP_200_OK,
+                ),
+            ),
+        ):
+            response = ApplicationScopedTokenObtainPairView.as_view()(request)
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        response.render()
+        response = CsrfViewMiddleware(lambda raw_request: None).process_response(
+            request, response
+        )
+        self.assertIn("csrftoken", response.cookies)
+        self.assertEqual(response.cookies["csrftoken"]["samesite"], "Lax")
+        self.assertEqual(response.cookies["csrftoken"]["httponly"], "")
+        self.assertEqual(response.cookies["access"]["httponly"], True)

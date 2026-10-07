@@ -5,6 +5,7 @@ from access.models import (
     Actions,
     ApplicationEmailSettings,
     ApplicationPermissions,
+    ApplicationRolePermissions,
     ApplicationRoles,
     Applications,
     EmailDeliveryLogs,
@@ -126,6 +127,12 @@ class ApplicationRolesAdmin(admin.ModelAdmin):
 class ApplicationPermissionsAdmin(admin.ModelAdmin):
     list_display = ("ApplicationID", "PermissionID", "UpdatedAt")
     list_filter = ("ApplicationID", "PermissionID")
+
+
+@admin.register(ApplicationRolePermissions)
+class ApplicationRolePermissionsAdmin(admin.ModelAdmin):
+    list_display = ("ApplicationID", "RoleID", "PermissionID", "UpdatedAt")
+    list_filter = ("ApplicationID", "RoleID", "PermissionID")
 
 
 @admin.register(RolePermissions)

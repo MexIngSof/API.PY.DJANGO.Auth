@@ -2,6 +2,8 @@ import hashlib
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from django.utils import timezone
 from django.utils.timezone import now
 from djoser.compat import get_user_email
@@ -9,6 +11,7 @@ from djoser.conf import settings as djoser_settings
 from djoser.views import UserViewSet
 from djoser.social.views import ProviderAuthView
 from rest_framework import status
+from rest_framework.exceptions import ValidationError
 from rest_framework.request import Request
 from rest_framework.response import Response
 from rest_framework.views import APIView
@@ -24,7 +27,6 @@ from access.models import (
     AccessAuditEvents,
     Applications,
     LoginAttempts,
-    PasswordHistory,
     RefreshTokens,
     SocialLoginAttempts,
     SocialProviders,
@@ -383,11 +385,10 @@ class RequiredPasswordChangeView(APIView):
                 {"detail": "New password confirmation does not match."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        if len(new_password) < 12:
-            return Response(
-                {"detail": "New password must contain at least 12 characters."},
-                status=status.HTTP_400_BAD_REQUEST,
-            )
+        try:
+            validate_password(new_password, user=request.user)
+        except DjangoValidationError as error:
+            raise ValidationError({"new_password": error.messages}) from error
         if not request.user.check_password(current_password):
             return Response(
                 {"detail": "Current password is invalid."},
@@ -397,7 +398,6 @@ class RequiredPasswordChangeView(APIView):
         request.user.set_password(new_password)
         request.user.must_change_password = False
         request.user.save(update_fields=["password", "must_change_password"])
-        PasswordHistory.objects.create(UserID=request.user, PasswordHash=request.user.password)
         record_access_event(
             request,
             "identity.password.changed",
@@ -513,11 +513,3 @@ class CustomTokenVerifyView(TokenVerifyView):
             request.data["token"] = access_token
 
         return super().post(request, *args, **kwargs)
-
-
-class LogoutView(APIView):
-    def post(self, request, *args, **kwargs):
-        response = Response(status=status.HTTP_204_NO_CONTENT)
-        response.delete_cookie("access")
-        response.delete_cookie("refresh")
-        return response

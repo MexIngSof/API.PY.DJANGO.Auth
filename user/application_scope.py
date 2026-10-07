@@ -27,23 +27,35 @@ def _trusted_gateway_context(request):
     return bool(expected and supplied and secrets.compare_digest(expected, supplied))
 
 
-def _request_value(request, key):
+def _request_value(request, key, *, include_query=True):
     data = getattr(request, "data", None)
     if hasattr(data, "get"):
         value = data.get(key)
         if value not in (None, ""):
             return value
-    query_params = getattr(request, "query_params", None)
-    if hasattr(query_params, "get"):
-        value = query_params.get(key)
-        if value not in (None, ""):
-            return value
+    if include_query:
+        query_params = getattr(request, "query_params", None)
+        if hasattr(query_params, "get"):
+            value = query_params.get(key)
+            if value not in (None, ""):
+                return value
     return None
 
 
-def _validate_client_context(request, application):
+def trusted_target_query_keys_for_request(request):
+    """Return target-query exemptions declared by the resolved view class."""
+    parser_context = getattr(request, "parser_context", None) or {}
+    view = parser_context.get("view") if hasattr(parser_context, "get") else None
+    return tuple(getattr(view, "trusted_application_target_query_keys", ()))
+
+
+def _validate_client_context(request, application, *, trusted_target_query_keys=()):
     for key in CLIENT_APPLICATION_CODE_KEYS:
-        value = _request_value(request, key)
+        value = _request_value(
+            request,
+            key,
+            include_query=key not in trusted_target_query_keys,
+        )
         if value is None:
             continue
         if str(value).strip().upper() != application.Code:
@@ -67,7 +79,7 @@ def _validate_client_context(request, application):
             )
 
 
-def resolve_application_context(request):
+def resolve_application_context(request, *, trusted_target_query_keys=()):
     cached = getattr(request, "auth_application", None)
     if cached is not None:
         return cached
@@ -96,7 +108,11 @@ def resolve_application_context(request):
             code="APPLICATION_NOT_REGISTERED",
         )
 
-    _validate_client_context(request, application)
+    _validate_client_context(
+        request,
+        application,
+        trusted_target_query_keys=trusted_target_query_keys,
+    )
     _cache_application(request, application)
     return application
 

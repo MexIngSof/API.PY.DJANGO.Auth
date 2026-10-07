@@ -8,12 +8,16 @@ from access.models import Applications
 class ApplicationEmailIdentityConstraintTests(TestCase):
     def setUp(self):
         self.User = get_user_model()
-        self.refapart = Applications.objects.create(Code="REFAPART", Name="RefaPart", IsActive=True)
-        self.jobcron = Applications.objects.create(Code="JOBCRON", Name="JobCron", IsActive=True)
+        self.refapart, _ = Applications.objects.get_or_create(
+            Code="REFAPART", defaults={"Name": "RefaPart", "IsActive": True}
+        )
+        self.jobcron, _ = Applications.objects.get_or_create(
+            Code="JOBCRON", defaults={"Name": "JobCron", "IsActive": True}
+        )
 
     def _create_raw_user(self, email, application):
         user = self.User(
-            email=email,
+            email=email.strip(),
             idApp=application.ApplicationID,
             first_name="Test",
             last_name="User",
@@ -27,6 +31,7 @@ class ApplicationEmailIdentityConstraintTests(TestCase):
         second = self._create_raw_user("USER@example.com", self.jobcron)
 
         self.assertEqual(second.idApp, self.jobcron.ApplicationID)
+        self.assertEqual(second.email, "USER@example.com")
 
     def test_same_normalized_email_is_rejected_in_same_application(self):
         self._create_raw_user("user@example.com", self.refapart)

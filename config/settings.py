@@ -7,20 +7,30 @@ from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
 from auth.email_settings import get_email_settings, resolve_email_backend
+from auth.cookie_policy import resolve_cookie_policy
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 getenv = os.getenv
 logger = logging.getLogger(__name__)
 
-SECRET_KEY = getenv("SECRET_KEY")
+SECRET_KEY = (getenv("DJANGO_SECRET_KEY") or getenv("SECRET_KEY") or "").strip()
 if not SECRET_KEY:
     raise ImproperlyConfigured("SECRET_KEY is required")
 
 DEBUG = getenv("DEBUG", "False") == "True"
 DEVELOPMENT_MODE = getenv("DEVELOPMENT_MODE", "False") == "True"
 
-ALLOWED_HOSTS = [host for host in getenv("ALLOWED_HOSTS", "").split(",") if host]
+def resolve_allowed_hosts(primary=None, django_fallback=None):
+    if primary is None:
+        primary = getenv("ALLOWED_HOSTS", "")
+    if django_fallback is None:
+        django_fallback = getenv("DJANGO_ALLOWED_HOSTS", "")
+    configured = primary or django_fallback or ""
+    return [host.strip() for host in configured.split(",") if host.strip()]
+
+
+ALLOWED_HOSTS = resolve_allowed_hosts()
 CSRF_TRUSTED_ORIGINS = [origin for origin in getenv("CSRF_TRUSTED_ORIGINS", "").split(",") if origin]
 CORS_ALLOWED_ORIGINS = [origin for origin in getenv("CORS_ALLOWED_ORIGINS", "").split(",") if origin]
 CORS_ALLOW_CREDENTIALS = True
@@ -39,6 +49,7 @@ INSTALLED_APPS = [
     "social_django",
     "user",
     "access",
+    "roles",
 ]
 
 MIDDLEWARE = [
@@ -81,6 +92,13 @@ def _append_search_path(options, search_path):
         options["options"] = f"{existing} {token}".strip()
 
 
+def _configure_auth_search_path(options):
+    configured = (getenv("AUTH_POSTGRES_OPTIONS", "") or getenv("POSTGRES_OPTIONS", "")).strip()
+    if configured:
+        options["options"] = configured
+    _append_search_path(options, '"Auth","AuthRuntime",public')
+
+
 def build_postgres_database_config():
     db_url = getenv("DATABASE_URL", "").strip()
     if db_url:
@@ -95,7 +113,7 @@ def build_postgres_database_config():
         options = {}
         if query.get("options"):
             options["options"] = query["options"]
-        _append_search_path(options, '"Auth",public')
+        _configure_auth_search_path(options)
         return {
             "ENGINE": "django.db.backends.postgresql",
             "NAME": db_name,
@@ -108,16 +126,16 @@ def build_postgres_database_config():
 
     config = {
         "ENGINE": "django.db.backends.postgresql",
-        "NAME": getenv("AUTH_DB_NAME", "Auth"),
-        "USER": getenv("AUTH_DB_USER", "Auth"),
-        "PASSWORD": getenv("AUTH_DB_PASSWORD", ""),
-        "HOST": getenv("AUTH_DB_HOST", "localhost"),
-        "PORT": getenv("AUTH_DB_PORT", "5432"),
+        "NAME": getenv("AUTH_DB_NAME", "") or getenv("DB_NAME", "Auth"),
+        "USER": getenv("AUTH_DB_USER", "") or getenv("DB_USER", "Auth"),
+        "PASSWORD": getenv("AUTH_DB_PASSWORD", "") or getenv("DB_PASSWORD", ""),
+        "HOST": getenv("AUTH_DB_HOST", "") or getenv("DB_HOST", "") or getenv("POSTGRES_HOST", "localhost"),
+        "PORT": getenv("AUTH_DB_PORT", "") or getenv("DB_PORT", "") or getenv("POSTGRES_PORT", "5432"),
         "OPTIONS": {},
     }
     if config.get("NAME") != config.get("USER"):
         raise ImproperlyConfigured("DB_USER == DB_NAME is required")
-    _append_search_path(config["OPTIONS"], '"Auth",public')
+    _configure_auth_search_path(config["OPTIONS"])
     return config
 
 
@@ -227,6 +245,18 @@ SIMPLE_JWT = {
     "ROTATE_REFRESH_TOKENS": True,
     "BLACKLIST_AFTER_ROTATION": True,
 }
+
+_cookie_policy = resolve_cookie_policy()
+AUTH_COOKIE = "access"
+AUTH_COOKIE_ACCESS_MAX_AGE = int(getenv("AUTH_COOKIE_ACCESS_MAX_AGE", "900"))
+AUTH_COOKIE_REFRESH_MAX_AGE = int(getenv("AUTH_COOKIE_REFRESH_MAX_AGE", "604800"))
+AUTH_COOKIE_PATH = getenv("AUTH_COOKIE_PATH", "/")
+AUTH_COOKIE_SECURE = _cookie_policy.secure
+AUTH_COOKIE_HTTP_ONLY = True
+AUTH_COOKIE_SAMESITE = _cookie_policy.same_site
+CSRF_COOKIE_SECURE = _cookie_policy.secure
+CSRF_COOKIE_SAMESITE = _cookie_policy.same_site
+CSRF_COOKIE_HTTPONLY = False
 
 SOCIAL_AUTH_GOOGLE_OAUTH2_KEY = getenv("SOCIAL_AUTH_GOOGLE_OAUTH2_KEY", "")
 SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET = getenv("SOCIAL_AUTH_GOOGLE_OAUTH2_SECRET", "")

@@ -17,8 +17,17 @@ class ApplicationScopedIdentityFlowTests(SimpleTestCase):
     def test_normalize_email_is_case_insensitive_and_trimmed(self):
         self.assertEqual(normalize_email("  USER@Example.COM  "), "user@example.com")
 
-    def test_task3_preserves_global_email_unique_until_identity_migration(self):
-        self.assertTrue(UserAccount._meta.get_field("email").unique)
+    def test_email_identity_is_case_insensitively_unique_within_each_application(self):
+        email = UserAccount._meta.get_field("email")
+        self.assertFalse(email.unique)
+        constraint = next(
+            constraint
+            for constraint in UserAccount._meta.constraints
+            if constraint.name == "uq_useraccounts_application_email"
+        )
+        self.assertEqual(len(constraint.expressions), 2)
+        self.assertEqual(constraint.expressions[0].name, "idApp")
+        self.assertEqual(constraint.expressions[1].get_source_expressions()[0].name, "email")
 
     @patch("user.account_scope.get_user_model")
     def test_account_lookup_uses_application_and_normalized_email(self, get_user_model_mock):
@@ -75,6 +84,8 @@ class ApplicationScopedIdentityFlowTests(SimpleTestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["code"], "APPLICATION_ACCESS_DENIED")
 
+    @patch("user.scoped_views.record_access_event")
+    @patch("user.scoped_views.get_user_email", side_effect=lambda user: user.email)
     @patch("user.scoped_views.djoser_settings")
     @patch("user.scoped_views.find_local_account")
     @patch("user.scoped_views.resolve_application_context")
@@ -83,6 +94,8 @@ class ApplicationScopedIdentityFlowTests(SimpleTestCase):
         resolve_application_context_mock,
         find_local_account_mock,
         djoser_settings_mock,
+        _get_user_email_mock,
+        _record_access_event_mock,
     ):
         application = SimpleNamespace(ApplicationID=4, Code="REFAPART")
         user = SimpleNamespace(email="user@example.com", idApp=4, is_active=True)

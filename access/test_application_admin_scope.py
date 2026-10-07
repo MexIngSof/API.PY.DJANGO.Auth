@@ -1,7 +1,8 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
 from rest_framework.exceptions import NotFound, PermissionDenied
-from rest_framework.test import APIRequestFactory, force_authenticate
+from rest_framework.request import Request
+from rest_framework.test import APIRequestFactory
 
 from access.application_admin_scope import resolve_admin_target_application
 from access.models import Applications
@@ -11,8 +12,12 @@ from access.models import Applications
 class ApplicationAdminScopeTests(TestCase):
     def setUp(self):
         self.factory = APIRequestFactory()
-        self.refapart = Applications.objects.create(Code="REFAPART", Name="RefaPart", IsActive=True)
-        self.jobcron = Applications.objects.create(Code="JOBCRON", Name="JobCron", IsActive=True)
+        self.refapart, _ = Applications.objects.get_or_create(
+            Code="REFAPART", defaults={"Name": "RefaPart", "IsActive": True}
+        )
+        self.jobcron, _ = Applications.objects.get_or_create(
+            Code="JOBCRON", defaults={"Name": "JobCron", "IsActive": True}
+        )
         User = get_user_model()
         self.delegated = User.objects.create_user(
             email="delegated@example.com",
@@ -34,8 +39,13 @@ class ApplicationAdminScopeTests(TestCase):
             HTTP_X_APPLICATION_CODE="REFAPART",
             HTTP_X_GATEWAY_INTERNAL_TOKEN="admin-scope-test-secret",
         )
-        force_authenticate(request, user=user)
-        return request
+        return self._as_request(request, user)
+
+    @staticmethod
+    def _as_request(request, user):
+        drf_request = Request(request)
+        drf_request.user = user
+        return drf_request
 
     def test_delegated_admin_defaults_target_to_trusted_actor_application(self):
         target = resolve_admin_target_application(self._request(self.delegated))

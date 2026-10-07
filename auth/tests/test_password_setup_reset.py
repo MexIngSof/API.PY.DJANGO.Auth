@@ -25,6 +25,7 @@ class PasswordSetupResetTests(SimpleTestCase):
         self.assertEqual(match.func.actions, {"post": "reset_password"})
         self.assertEqual(match.func.cls, ApplicationScopedUserViewSet)
 
+    @patch("user.scoped_views.get_user_email", side_effect=lambda user: user.email)
     @patch("user.scoped_views.record_access_event")
     @patch("user.scoped_views.djoser_settings")
     @patch("user.scoped_views.find_local_account")
@@ -35,6 +36,7 @@ class PasswordSetupResetTests(SimpleTestCase):
         find_local_account_mock,
         djoser_settings_mock,
         record_access_event_mock,
+        _get_user_email_mock,
     ):
         application = SimpleNamespace(ApplicationID=3, Code="JOBCRON")
         user = SimpleNamespace(
@@ -68,6 +70,7 @@ class PasswordSetupResetTests(SimpleTestCase):
             metadata={"first_access": True},
         )
 
+    @patch("user.scoped_views.get_user_email", side_effect=lambda user: user.email)
     @patch("user.scoped_views.record_access_event")
     @patch("user.scoped_views.djoser_settings")
     @patch("user.scoped_views.find_local_account")
@@ -78,6 +81,7 @@ class PasswordSetupResetTests(SimpleTestCase):
         find_local_account_mock,
         djoser_settings_mock,
         record_access_event_mock,
+        _get_user_email_mock,
     ):
         application = SimpleNamespace(ApplicationID=1, Code="REFAPART")
         user = SimpleNamespace(
