@@ -44,6 +44,7 @@ def main() -> int:
         "access.test_customer_enterprise_permissions",
         "access.test_jobcron_product_import_permissions",
         "auth.tests.test_mobile_session_revocation.MobileSessionContractTests",
+        "--keepdb",
         "--verbosity",
         "2",
     )

@@ -4,6 +4,7 @@ from django.contrib.auth import get_user_model
 from django.core.management import call_command
 from django.core.management.base import CommandError
 from django.test import TestCase
+from unittest.mock import Mock, patch
 
 from access.models import Applications
 
@@ -28,10 +29,29 @@ class ApplicationEmailIdentityPreflightTests(TestCase):
         self.assertIn("preflight passed", output.getvalue())
 
     def test_case_insensitive_duplicate_in_same_application_fails(self):
-        self._create_raw_user("user@example.com", self.application.ApplicationID)
-        self._create_raw_user("USER@example.com", self.application.ApplicationID)
-        with self.assertRaises(CommandError):
-            call_command("audit_application_email_identity", stdout=StringIO())
+        mock_user_model = Mock()
+        mock_user_model.objects.values_list.return_value = [self.application.ApplicationID]
+
+        duplicate_rows = Mock()
+        mock_user_model.objects.annotate.return_value = duplicate_rows
+        duplicate_rows.values.return_value.annotate.return_value.filter.return_value.order_by.return_value = [
+            {
+                "idApp": self.application.ApplicationID,
+                "normalized_email": "user@example.com",
+                "count": 2,
+            }
+        ]
+
+        normalized_rows = Mock()
+        mock_user_model.objects.exclude.return_value = normalized_rows
+        normalized_rows.values_list.return_value.order_by.return_value = []
+
+        with patch(
+            "user.management.commands.audit_application_email_identity.get_user_model",
+            return_value=mock_user_model,
+        ):
+            with self.assertRaises(CommandError):
+                call_command("audit_application_email_identity", stdout=StringIO())
 
     def test_orphan_application_identity_fails(self):
         self._create_raw_user("orphan@example.com", 999999)

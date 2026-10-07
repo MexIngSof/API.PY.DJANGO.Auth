@@ -1,5 +1,6 @@
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, Group, Permission, PermissionsMixin
 from django.db import models
+from django.db.models.functions import Lower
 
 
 class UserAccountManager(BaseUserManager):
@@ -44,7 +45,13 @@ class UserAccount(AbstractBaseUser, PermissionsMixin):
 
     class Meta:
         db_table = '"Auth"."UserAccounts"'
-        constraints = [models.UniqueConstraint(fields=("idApp", "email"), name="uq_useraccounts_application_email")]
+        constraints = [
+            models.UniqueConstraint(
+                models.F("idApp"),
+                Lower("email"),
+                name="uq_useraccounts_application_email",
+            )
+        ]
         indexes = [models.Index(fields=("idApp", "email"), name="ix_useraccounts_app_email")]
 
     def __str__(self):

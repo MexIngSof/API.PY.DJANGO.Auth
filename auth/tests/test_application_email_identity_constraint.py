@@ -17,7 +17,7 @@ class ApplicationEmailIdentityConstraintTests(TestCase):
 
     def _create_raw_user(self, email, application):
         user = self.User(
-            email=email.strip().lower(),
+            email=email.strip(),
             idApp=application.ApplicationID,
             first_name="Test",
             last_name="User",
@@ -31,6 +31,7 @@ class ApplicationEmailIdentityConstraintTests(TestCase):
         second = self._create_raw_user("USER@example.com", self.jobcron)
 
         self.assertEqual(second.idApp, self.jobcron.ApplicationID)
+        self.assertEqual(second.email, "USER@example.com")
 
     def test_same_normalized_email_is_rejected_in_same_application(self):
         self._create_raw_user("user@example.com", self.refapart)

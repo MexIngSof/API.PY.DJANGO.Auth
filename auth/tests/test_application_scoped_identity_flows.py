@@ -17,18 +17,17 @@ class ApplicationScopedIdentityFlowTests(SimpleTestCase):
     def test_normalize_email_is_case_insensitive_and_trimmed(self):
         self.assertEqual(normalize_email("  USER@Example.COM  "), "user@example.com")
 
-    def test_email_identity_is_unique_within_each_application(self):
+    def test_email_identity_is_case_insensitively_unique_within_each_application(self):
         email = UserAccount._meta.get_field("email")
         self.assertFalse(email.unique)
-        constraints = {
-            constraint.name: tuple(constraint.fields)
+        constraint = next(
+            constraint
             for constraint in UserAccount._meta.constraints
             if constraint.name == "uq_useraccounts_application_email"
-        }
-        self.assertEqual(
-            constraints["uq_useraccounts_application_email"],
-            ("idApp", "email"),
         )
+        self.assertEqual(len(constraint.expressions), 2)
+        self.assertEqual(constraint.expressions[0].name, "idApp")
+        self.assertEqual(constraint.expressions[1].get_source_expressions()[0].name, "email")
 
     @patch("user.account_scope.get_user_model")
     def test_account_lookup_uses_application_and_normalized_email(self, get_user_model_mock):
