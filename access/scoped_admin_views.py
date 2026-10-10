@@ -6,6 +6,7 @@ from rest_framework.response import Response
 from rest_framework.viewsets import ModelViewSet
 
 from access.application_admin_scope import ADMIN_TARGET_QUERY_KEYS, resolve_admin_target_application
+from access.permission_flags import parse_permission_allow
 from access.models import (
     AccessAuditEvents,
     ApplicationPermissions,
@@ -106,12 +107,15 @@ class ApplicationScopedIdentityUserViewSet(ScopedAdminModelViewSet):
             return Response({"detail": "Permission not found."}, status=status.HTTP_404_NOT_FOUND)
         if not ApplicationPermissions.objects.filter(ApplicationID=target, PermissionID=permission).exists():
             return Response({"detail": "Permission is not registered for this application."}, status=status.HTTP_400_BAD_REQUEST)
-        allow = request.data.get("allow", request.data.get("Allow", True))
+        try:
+            allow = parse_permission_allow(request.data.get("allow", request.data.get("Allow", True)))
+        except ValueError:
+            return Response({"detail": "Allow must be an explicit boolean."}, status=status.HTTP_400_BAD_REQUEST)
         reason = request.data.get("reason") or request.data.get("Reason") or "Application-scoped administration."
         user_permission, _ = UserPermissions.objects.update_or_create(
             UserID=user,
             PermissionID=permission,
-            defaults={"Allow": bool(allow), "Reason": reason},
+            defaults={"Allow": allow, "Reason": reason},
         )
         self._audit(
             request,
