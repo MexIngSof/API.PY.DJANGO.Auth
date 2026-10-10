@@ -1,6 +1,7 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
+from access.views import IdentityUserViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
 
 from access.models import Actions, ApplicationPermissions, Applications, Modules, Permissions, UserPermissions
@@ -126,3 +127,17 @@ class AdminTargetApplicationIntegrationTests(TestCase):
         self.assertFalse(UserPermissions.objects.filter(
             UserID=self.delegated, PermissionID=permission,
         ).exists())
+
+    def test_legacy_permission_admin_does_not_turn_false_into_grant(self):
+        permission = self._register_permission_for_flag_test()
+        request = APIRequestFactory().post(
+            f"/api/access/identity/users/{self.delegated.pk}/permissions/",
+            {"permission_code": permission.Code, "allow": "false"},
+            format="json",
+            HTTP_X_APPLICATION_CODE="REFAPART",
+        )
+        force_authenticate(request, user=self.delegated)
+        response = IdentityUserViewSet.as_view({"post": "assign_permission"})(request, pk=self.delegated.pk)
+        self.assertEqual(response.status_code, 200, response.data)
+        row = UserPermissions.objects.get(UserID=self.delegated, PermissionID=permission)
+        self.assertIs(row.Allow, False)
