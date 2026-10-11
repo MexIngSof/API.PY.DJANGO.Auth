@@ -81,3 +81,32 @@ class ApplicationScopedSessionRevocationTests(TestCase):
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.data["code"], "APPLICATION_ACCESS_DENIED")
         revoke.assert_not_called()
+
+    def test_explicit_false_keep_current_revokes_the_current_session(self):
+        session = UserSessions.objects.create(
+            UserID=self.user, ApplicationID=self.refapart, IsOnline=True,
+        )
+        view = OwnUserSessionViewSet.as_view({"post": "revoke_all"})
+        with patch("access.views.get_current_session", return_value=session):
+            response = view(self._request(
+                "/access/me/sessions/revoke-all/", "REFAPART",
+                {"keep_current": "false"},
+            ))
+        self.assertEqual(response.status_code, 200)
+        session.refresh_from_db()
+        self.assertIsNotNone(session.RevokedAt)
+        self.assertFalse(response.data["kept_current"])
+
+    def test_unknown_keep_current_value_rejects_without_revoking(self):
+        session = UserSessions.objects.create(
+            UserID=self.user, ApplicationID=self.refapart, IsOnline=True,
+        )
+        view = OwnUserSessionViewSet.as_view({"post": "revoke_all"})
+        with patch("access.views.get_current_session", return_value=session):
+            response = view(self._request(
+                "/access/me/sessions/revoke-all/", "REFAPART",
+                {"keep_current": "unknown"},
+            ))
+        self.assertEqual(response.status_code, 400)
+        session.refresh_from_db()
+        self.assertIsNone(session.RevokedAt)
