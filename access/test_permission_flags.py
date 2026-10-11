@@ -1,7 +1,7 @@
 """Permission grants must not turn user-supplied false strings into True."""
 import unittest
 
-from access.permission_flags import parse_permission_allow
+from access.permission_flags import parse_permission_allow, parse_request_boolean
 
 
 class PermissionAllowParsingTests(unittest.TestCase):
@@ -14,6 +14,13 @@ class PermissionAllowParsingTests(unittest.TestCase):
         for value in (True, 1, "true", "TRUE", " 1 ", "yes", "on", "y"):
             with self.subTest(value=value):
                 self.assertIs(parse_permission_allow(value), True)
+
+    def test_session_revocation_false_and_invalid_values(self):
+        self.assertIs(parse_request_boolean("false"), False)
+        self.assertIs(parse_request_boolean("off"), False)
+        self.assertIs(parse_request_boolean(True), True)
+        with self.assertRaises(ValueError):
+            parse_request_boolean("unknown")
 
     def test_ambiguous_payloads_fail_closed(self):
         for value in (None, "", "false-ish", "2", 2, -1, [], {}, 1.0):
