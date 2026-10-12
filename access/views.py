@@ -50,6 +50,7 @@ from access.serializers import (
     UserPermissionSerializer,
     UserSessionSerializer,
 )
+from access.permission_flags import parse_permission_allow, parse_request_boolean
 from roles.models import Roles, UserRoles
 
 
@@ -285,7 +286,10 @@ class OwnUserSessionViewSet(
 
     @action(detail=False, methods=["post"], url_path="revoke-all")
     def revoke_all(self, request):
-        keep_current = bool(request.data.get("keep_current", False))
+        try:
+            keep_current = parse_request_boolean(request.data.get("keep_current", False))
+        except ValueError:
+            return Response({"detail": "keep_current must be an explicit boolean."}, status=status.HTTP_400_BAD_REQUEST)
         current_session = get_current_session(request)
         queryset = self.get_queryset().filter(RevokedAt__isnull=True)
         if keep_current and current_session is not None:
@@ -447,7 +451,10 @@ class IdentityUserViewSet(AdminModelViewSet):
         user = self.get_object()
         permission_id = request.data.get("permission_id") or request.data.get("PermissionId")
         permission_code = request.data.get("permission_code") or request.data.get("PermissionCode")
-        allow = request.data.get("allow", request.data.get("Allow", True))
+        try:
+            allow = parse_permission_allow(request.data.get("allow", request.data.get("Allow", True)))
+        except ValueError:
+            return Response({"detail": "Allow must be an explicit boolean."}, status=status.HTTP_400_BAD_REQUEST)
         reason = request.data.get("reason") or request.data.get("Reason") or "Asignado desde JobCron."
 
         permission = None
@@ -475,7 +482,7 @@ class IdentityUserViewSet(AdminModelViewSet):
         user_permission, _ = UserPermissions.objects.update_or_create(
             UserID=user,
             PermissionID=permission,
-            defaults={"Allow": bool(allow), "Reason": reason},
+            defaults={"Allow": allow, "Reason": reason},
         )
         AccessAuditEvents.objects.create(
             UserID=request.user,

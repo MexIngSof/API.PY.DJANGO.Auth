@@ -1,9 +1,10 @@
 from django.contrib.auth import get_user_model
 from django.test import TestCase, override_settings
-from rest_framework.test import APIClient
+from rest_framework.test import APIClient, APIRequestFactory, force_authenticate
+from access.views import IdentityUserViewSet
 from rest_framework_simplejwt.tokens import RefreshToken
 
-from access.models import Applications
+from access.models import Actions, ApplicationPermissions, Applications, Modules, Permissions, UserPermissions
 
 
 @override_settings(GATEWAY_INTERNAL_SHARED_SECRET="admin-scope-test-secret")
@@ -88,3 +89,55 @@ class AdminTargetApplicationIntegrationTests(TestCase):
             "/api/access/identity/users/", {"application_code": "REFAPART"}
         )
         self.assertEqual(response.status_code, 200)
+
+    def _register_permission_for_flag_test(self):
+        module, _ = Modules.objects.get_or_create(
+            Code="AUTH_SCOPED_FLAG_TEST",
+            defaults={"Name": "Auth scoped flag test", "Path": "/test/rbac"},
+        )
+        action, _ = Actions.objects.get_or_create(Name="READ")
+        permission, _ = Permissions.objects.get_or_create(
+            Code="AUTH_SCOPED_FLAG_TEST.READ",
+            defaults={"ModuleID": module, "ActionID": action},
+        )
+        ApplicationPermissions.objects.get_or_create(
+            ApplicationID=self.refapart, PermissionID=permission,
+        )
+        return permission
+
+    def test_explicit_false_permission_flag_is_persisted_as_denial(self):
+        permission = self._register_permission_for_flag_test()
+        response = self._client(self.delegated).post(
+            f"/api/access/identity/users/{self.delegated.pk}/permissions/",
+            {"permission_code": permission.Code, "allow": "false"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        row = UserPermissions.objects.get(UserID=self.delegated, PermissionID=permission)
+        self.assertIs(row.Allow, False)
+
+    def test_ambiguous_permission_flag_is_rejected_without_grant(self):
+        permission = self._register_permission_for_flag_test()
+        response = self._client(self.delegated).post(
+            f"/api/access/identity/users/{self.delegated.pk}/permissions/",
+            {"permission_code": permission.Code, "allow": "false-ish"},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 400, response.data)
+        self.assertFalse(UserPermissions.objects.filter(
+            UserID=self.delegated, PermissionID=permission,
+        ).exists())
+
+    def test_legacy_permission_admin_does_not_turn_false_into_grant(self):
+        permission = self._register_permission_for_flag_test()
+        request = APIRequestFactory().post(
+            f"/api/access/identity/users/{self.delegated.pk}/permissions/",
+            {"permission_code": permission.Code, "allow": "false"},
+            format="json",
+            HTTP_X_APPLICATION_CODE="REFAPART",
+        )
+        force_authenticate(request, user=self.delegated)
+        response = IdentityUserViewSet.as_view({"post": "assign_permission"})(request, pk=self.delegated.pk)
+        self.assertEqual(response.status_code, 200, response.data)
+        row = UserPermissions.objects.get(UserID=self.delegated, PermissionID=permission)
+        self.assertIs(row.Allow, False)

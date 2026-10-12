@@ -57,3 +57,41 @@ class ApplicationEmailTemplateFallbackTests(SimpleTestCase):
         resolved = self.email.resolve_file_template_name(application)
 
         self.assertEqual(resolved, "")
+
+    @patch("auth.custom_email.get_email_settings")
+    def test_password_reset_uses_configured_public_app_url_over_database_redirect(self, get_email_settings):
+        application = SimpleNamespace(Code="JOBCRON")
+        database_email_settings = SimpleNamespace(
+            RedirectBaseUrl="http://localhost:3000",
+            CommercialName="JobCron",
+            LogoUrl="",
+            PrimaryColor="",
+            SenderName="JobCron",
+        )
+        get_email_settings.return_value = SimpleNamespace(public_app_url="http://jobcron.localhost")
+
+        class ContextEmailBase:
+            def get_context_data(self):
+                return {
+                    "url": "password-reset/uid-value/token-value",
+                    "protocol": "http",
+                    "domain": "localhost",
+                }
+
+        class PasswordResetContextEmail(AuthTransactionalEmailMixin, ContextEmailBase):
+            pass
+
+        email = PasswordResetContextEmail()
+        email.action_code = ACTION_PASSWORD_RESET
+
+        with patch.object(email, "resolve_email_metadata", return_value=(application, database_email_settings, None)), patch.object(
+            email, "resolve_file_template_name", return_value=""
+        ):
+            context = email.get_context_data()
+
+        self.assertEqual(
+            context["action_url"],
+            "http://jobcron.localhost/reset-password?uid=uid-value&token=token-value",
+        )
+        self.assertEqual(context["redirect_base_url"], "http://jobcron.localhost")
+        get_email_settings.assert_called_once_with("JOBCRON", development_mode=True)

@@ -133,9 +133,21 @@ class AuthTransactionalEmailMixin:
         application, email_settings, template = self.resolve_email_metadata(context)
         commercial_name = email_settings.CommercialName if email_settings is not None else context.get("site_name", "")
         raw_url = str(context.get("url", "")).lstrip("/")
-        if email_settings is not None and email_settings.RedirectBaseUrl:
-            canonical_reset_url = canonical_password_reset_url(email_settings.RedirectBaseUrl, raw_url) if self.action_code == ACTION_PASSWORD_RESET else ""
-            action_url = canonical_reset_url or f"{email_settings.RedirectBaseUrl.rstrip('/')}/{raw_url}".rstrip("/")
+        project_settings = (
+            get_email_settings(
+                application.Code,
+                development_mode=getattr(settings, "DEVELOPMENT_MODE", True),
+            )
+            if application is not None
+            else None
+        )
+        redirect_base_url = (
+            (project_settings.public_app_url if project_settings is not None else "")
+            or (email_settings.RedirectBaseUrl if email_settings is not None else "")
+        )
+        if redirect_base_url:
+            canonical_reset_url = canonical_password_reset_url(redirect_base_url, raw_url) if self.action_code == ACTION_PASSWORD_RESET else ""
+            action_url = canonical_reset_url or f"{redirect_base_url.rstrip('/')}/{raw_url}".rstrip("/")
         else:
             action_url = f"{context.get('protocol')}://{context.get('domain')}/{raw_url}".rstrip("/")
         context.update({
@@ -145,7 +157,7 @@ class AuthTransactionalEmailMixin:
             "logo_url": email_settings.LogoUrl if email_settings else "",
             "primary_color": email_settings.PrimaryColor if email_settings else "",
             "sender_name": email_settings.SenderName if email_settings else "",
-            "redirect_base_url": email_settings.RedirectBaseUrl if email_settings else "",
+            "redirect_base_url": redirect_base_url,
             "action_code": self.action_code,
             "action_name": ACTION_LABELS.get(self.action_code, self.action_code),
             "action_url": action_url,
